@@ -1,138 +1,147 @@
-# Network Anomaly Detection System
+# SecureAI Agent — Network Threat Triage
 
-An unsupervised network anomaly detection system that uses **Isolation Forest** to identify malicious traffic patterns in both PCAP captures and CSV network logs. Tested on real-world botnet traffic from the CTU-13 dataset.
-
----
-
-## Demo Output
-
-![Anomaly Detection Report](anomaly_report_v2.png)
-
-*Time-series view showing traffic volume, connection count, failed connections, and the Isolation Forest anomaly score. Coloured vertical bands mark detected anomaly windows.*
+> **AI-powered cybersecurity agent** that ingests PCAP captures and network logs,
+> detects anomalies with Isolation Forest, and returns grounded threat explanations,
+> CVE context, and analyst-grade mitigations — via an OpenAI tool-calling loop.
 
 ---
 
-## Features
+## Architecture
 
-- **Dual input support** — accepts `.pcap` / `.pcapng` files (via scapy) and CSV log files
-- **Isolation Forest** — fully unsupervised; no labelled data needed
-- **5 anomaly types** automatically classified after detection
-- **4-panel time-series graph** with anomaly markers and IF score overlay
-- **Real-world validated** — tested on the CTU-13 botnet dataset (55 % attack recall, 69 % precision, zero labels used)
-- **Tunable** — `--contamination` and `--window` flags let you adjust sensitivity
+```
+User Query ("analyse capture.pcap for threats")
+          │
+          ▼
+  ┌─────────────────────────────────────┐
+  │          agent.py (GPT-4o)          │
+  │   OpenAI tool-calling loop          │
+  └────────┬──────────────┬────────────┘
+           │              │
+           ▼              ▼
+  analyze_traffic()   lookup_cve()
+           │              │
+           ▼              ▼
+  ┌─────────────────┐  ┌──────────────────────┐
+  │ Isolation Forest│  │ CVE + MITRE ATT&CK   │
+  │ anomaly detector│  │ static knowledge base │
+  │ (anomaly_       │  │ (cve_db.py)          │
+  │  detector_v2.py)│  └──────────────────────┘
+  └─────────────────┘
+           │
+           ▼
+  ┌─────────────────────────────────────┐
+  │  Structured Threat Report           │
+  │  • Executive summary                │
+  │  • Findings table (IP, type, sev.)  │
+  │  • CVEs + ATT&CK per attack type    │
+  │  • Prioritised mitigations          │
+  └─────────────────────────────────────┘
+```
+
+The agent is **bounded** — it analyses and advises; it never takes automated action.
+Every tool call is logged. Human review is always the final step.
 
 ---
 
-## Detected Anomaly Types
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `analyze_traffic(file, contamination, window)` | Runs Isolation Forest on a PCAP or CSV log. Returns anomaly episodes with type, severity, source IP, IF score, and traffic stats. |
+| `lookup_cve(attack_type)` | Returns CVEs, MITRE ATT&CK technique, and mitigations for a detected attack type. |
+
+---
+
+## Detection Engine
+
+The underlying detector (`anomaly_detector_v2.py`) uses **scikit-learn Isolation Forest** —
+fully unsupervised, no labelled data required. Validated on real botnet traffic:
+
+| Dataset | Precision | Recall | Notes |
+|---|---|---|---|
+| CTU-13 (Neris, Rbot, Menti botnets) | 69.5 % | 55.5 % | Zero labels used during training |
+
+**Detected anomaly types:**
 
 | Type | Detection Signal |
 |---|---|
-| Traffic Spike / DDoS | Z-score or IF on byte-rate per time window |
 | Port Scan | Many distinct destination ports from one source IP |
 | Brute Force | High failed-connection ratio, single target port |
+| Traffic Spike / DDoS | Z-score spike on byte-rate per time window |
 | Data Exfiltration | Sustained high outbound volume (rolling Z-score) |
 | Night Activity | Unusual connection count during 00:00–05:59 |
 | Botnet C&C | Long idle flows, low packet rate, irregular timing |
 
 ---
 
-## How It Works
-
-```
-Input (PCAP or CSV)
-       │
-       ▼
-   Parser
-  ┌─────────────────────────┐
-  │ PCAP → scapy packet     │   extracts: timestamp, src/dst IP,
-  │ CSV  → pandas read_csv  │   port, protocol, bytes, TCP flags
-  └─────────────────────────┘
-       │
-       ▼
-Feature Engineering (per 5-min window × source IP)
-  n_packets, n_bytes, avg_bytes, std_bytes,
-  n_dst_ports, n_dst_ips, failed_ratio,
-  hour_sin, hour_cos   ← cyclical time encoding
-       │
-       ▼
-  Isolation Forest (sklearn, 200 trees)
-  Flags the most isolated feature vectors as anomalies
-       │
-       ▼
-  Rule-based labelling
-  Inspects which features deviate most → assigns type + severity
-       │
-       ▼
-  Console report + 4-panel PNG graph
-```
-
----
-
-## Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/akrishnash/anamoly_detection.git
 cd anamoly_detection
 pip install -r requirements.txt
+
+export OPENAI_API_KEY=sk-...
+
+# Analyse a log file
+python agent.py sample_logs/network_traffic.log
+
+# Analyse a PCAP
+python agent.py capture.pcap --contamination 0.03
+
+# Interactive chat mode
+python agent.py --interactive
 ```
 
-**requirements.txt**
-```
-pandas>=2.0
-numpy>=1.24
-matplotlib>=3.7
-scikit-learn>=1.3
-scapy>=2.5
-```
+### Generate sample data
 
-> **Note:** scapy requires Npcap (Windows) or libpcap (Linux/macOS) for live capture. For PCAP file reading, no extra driver is needed.
+```bash
+python generate_sample_log.py       # creates sample_logs/network_traffic.log
+python generate_sample_pcap.py      # creates sample_logs/network_traffic.pcap
+```
 
 ---
 
-## Quick Start
+## Sample Output
 
-### 1. Generate a sample log and test
-
-```bash
-# Create a synthetic log with 5 planted anomalies
-python generate_sample_log.py
-
-# Run the Isolation Forest detector
-python anomaly_detector_v2.py sample_logs/network_traffic.log
 ```
+================================================================
+  SecureAI Agent  —  Cybersecurity Triage
+  Isolation Forest + GPT-4o Tool Calling
+================================================================
 
-### 2. Generate a sample PCAP and test
+## Threat Report — sample_logs/network_traffic.log
 
-```bash
-python generate_sample_pcap.py
-python anomaly_detector_v2.py sample_logs/network_traffic.pcap
-```
+### Executive Summary
+Analysis of 7,722 network records spanning 2024-01-15 identified **5 anomaly
+episodes** across 4 distinct attack types. Two critical-severity events require
+immediate investigation: a data exfiltration attempt from 192.168.1.25 and an
+off-hours traffic spike from 192.168.1.50.
 
-### 3. Run on your own file
+### Findings
 
-```bash
-# Any PCAP
-python anomaly_detector_v2.py /path/to/capture.pcap
+| # | Time  | Source IP       | Type               | Severity |
+|---|-------|-----------------|-------------------|----------|
+| 1 | 19:43 | 192.168.1.25    | Data Exfiltration  | CRITICAL |
+| 2 | 02:20 | 192.168.1.50    | Night Activity     | CRITICAL |
+| 3 | 10:28 | 45.33.32.156    | Traffic Spike      | HIGH     |
+| 4 | 16:27 | 192.168.200.1   | Brute Force        | HIGH     |
+| 5 | 13:58 | 192.168.100.50  | Port Scan          | HIGH     |
 
-# Any CSV log (must have columns: timestamp, src_ip, dst_ip, dst_port, bytes, status)
-python anomaly_detector_v2.py /path/to/logs.csv
+### CVE Context
 
-# Tune sensitivity (default: 2 % contamination, 5-min window)
-python anomaly_detector_v2.py capture.pcap --contamination 0.03 --window 10min --out report.png
-```
+Data Exfiltration — MITRE T1048
+Relevant CVEs: CVE-2023-0669 (GoAnywhere MFT RCE, CVSS 7.2),
+CVE-2021-26855 (ProxyLogon, CVSS 9.8)
 
-### 4. Real-world CTU-13 botnet dataset
+Brute Force — MITRE T1110
+Relevant CVEs: CVE-2023-38408 (OpenSSH RCE, CVSS 9.8),
+CVE-2019-0708 (BlueKeep RDP, CVSS 9.8)
 
-```bash
-# Download the dataset (one-time)
-curl -L https://raw.githubusercontent.com/imfaisalmalik/CTU13-CSV-Dataset/main/CTU13_Attack_Traffic.csv \
-     -o sample_logs/CTU13_Attack_Traffic.csv
-
-curl -L https://raw.githubusercontent.com/imfaisalmalik/CTU13-CSV-Dataset/main/CTU13_Normal_Traffic.csv \
-     -o sample_logs/CTU13_Normal_Traffic.csv
-
-# Run the CTU-13 specific runner
-python run_ctu13.py
+### Prioritised Mitigations
+1. [CRITICAL] Block and investigate 192.168.1.25 — egress >500 MB in single window
+2. [CRITICAL] Review off-hours activity from 192.168.1.50 — possible C2 beacon
+3. [HIGH] Enforce account lockout on SSH/RDP targets of 192.168.200.1
 ```
 
 ---
@@ -142,89 +151,42 @@ python run_ctu13.py
 ```
 anamoly_detection/
 │
-├── anomaly_detector.py        # v1 — statistical rules (Z-score, frequency)
-├── anomaly_detector_v2.py     # v2 — Isolation Forest, PCAP + CSV input
-├── run_ctu13.py               # Real-world CTU-13 botnet runner
+├── agent.py                   ← SecureAI Agent (OpenAI tool-calling loop)
+├── cve_db.py                  ← CVE + MITRE ATT&CK knowledge base
 │
-├── generate_sample_log.py     # Generates sample_logs/network_traffic.log
-├── generate_sample_pcap.py    # Generates sample_logs/network_traffic.pcap
+├── anomaly_detector_v2.py     ← Isolation Forest detection engine (PCAP + CSV)
+├── anomaly_detector.py        ← v1 statistical detector (Z-score)
+├── run_ctu13.py               ← Real-world CTU-13 botnet evaluation runner
+│
+├── generate_sample_log.py     ← Generates synthetic log with 5 planted anomalies
+├── generate_sample_pcap.py    ← Generates synthetic PCAP
 │
 ├── requirements.txt
 │
-├── anomaly_report.png         # Sample output — v1 statistical detector
-├── anomaly_report_v2.png      # Sample output — v2 Isolation Forest (CSV)
-├── anomaly_report_pcap.png    # Sample output — v2 Isolation Forest (PCAP)
-├── anomaly_report_ctu13.png   # Sample output — CTU-13 real botnet data
-│
-└── sample_logs/
-    └── network_traffic.log    # Generated synthetic log (7,722 entries)
+├── anomaly_report_v2.png      ← Sample 4-panel detection graph (CSV input)
+├── anomaly_report_pcap.png    ← Sample detection graph (PCAP input)
+└── anomaly_report_ctu13.png   ← CTU-13 real botnet detection results
 ```
 
 ---
 
-## Sample Log Format (CSV)
+## Design Choices
 
-```
-timestamp,src_ip,dst_ip,dst_port,protocol,bytes,status,duration_ms
-2024-01-15 08:23:45,192.168.1.10,10.0.0.1,443,TCP,1240,SUCCESS,45
-2024-01-15 08:23:47,192.168.1.22,10.0.88.5,80,TCP,890,SUCCESS,33
-2024-01-15 10:28:01,45.33.32.156,192.168.1.3,443,TCP,98304,SUCCESS,12
-```
+**Why Isolation Forest?** Fully unsupervised — no labelled attack data required.
+Works on any network environment without retraining. The 55% recall on CTU-13 botnet
+traffic (zero labels) demonstrates real-world utility.
 
----
+**Why bounded tool calling?** The agent loop is deliberately constrained: it can read
+files and query a knowledge base, nothing else. No automated firewall rules, no ticket
+creation, no blocking. This is an *advisory* agent — the analyst stays in the loop.
 
-## Real-World Results — CTU-13 Botnet Dataset
-
-Dataset: [CTU-13](https://www.stratosphereips.org/datasets-ctu13) — real botnet captures (Neris, Rbot, Menti, etc.) mixed with normal traffic.  
-No labels used during training.
-
-```
-              precision    recall    f1-score
-Normal            0.630     0.757     0.687
-Attack            0.695     0.555     0.617
-accuracy                              0.656   (12,000 flows)
-
-Confusion matrix:
-  TN = 4,541   FP = 1,459
-  FN = 2,671   TP = 3,329
-```
-
-**55 % of real attacks caught with 70 % precision — fully unsupervised.**
-
-![CTU-13 Results](anomaly_report_ctu13.png)
-
----
-
-## Detector Versions
-
-| | v1 `anomaly_detector.py` | v2 `anomaly_detector_v2.py` |
-|---|---|---|
-| Algorithm | Statistical rules (Z-score, frequency thresholds) | Isolation Forest (sklearn) |
-| Input | CSV log only | CSV log + PCAP |
-| Training | None (hard thresholds) | Unsupervised fit on input data |
-| Tunable | Threshold constants in source | `--contamination`, `--window` flags |
-| Output | PNG report | PNG report + IF score panel |
-
----
-
-## Synthetic Anomalies (for testing)
-
-The sample generators plant 5 anomalies at known times:
-
-| # | Type | Time | Description |
-|---|---|---|---|
-| 1 | Night Activity | 02:20 | Off-hours burst from `192.168.1.50` |
-| 2 | Traffic Spike | 10:28 | High-volume flood from `45.33.32.156` |
-| 3 | Port Scan | 13:58 | Sequential SYN sweep by `192.168.100.50` |
-| 4 | Brute Force | 16:27 | SSH SYN+RST storm from `192.168.200.1` |
-| 5 | Data Exfiltration | 19:43 | Sustained large outbound from `192.168.1.25` |
+**Why save reports to disk?** Every run produces a timestamped Markdown file. In
+regulated environments audit trails are non-negotiable.
 
 ---
 
 ## Dataset Credit
 
-- **CTU-13**: Sebastián García, Martin Grill, Jan Stiborek, Alejandro Zunino.  
-  *"An empirical comparison of botnet detection methods"*, Computers & Security, 2014.  
+- **CTU-13**: Sebastián García, Martin Grill, Jan Stiborek, Alejandro Zunino.
+  *"An empirical comparison of botnet detection methods"*, Computers & Security, 2014.
   [https://www.stratosphereips.org/datasets-ctu13](https://www.stratosphereips.org/datasets-ctu13)
-
-- **CSV conversion**: [imfaisalmalik/CTU13-CSV-Dataset](https://github.com/imfaisalmalik/CTU13-CSV-Dataset)
