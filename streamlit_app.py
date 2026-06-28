@@ -75,12 +75,14 @@ def run_if(X: np.ndarray, y: np.ndarray, contamination: float):
 
 # ── charts ────────────────────────────────────────────────────────────────────
 
-def piles_fig(scores, y):
+def piles_fig(scores, y, cutoff):
     fig = go.Figure()
     fig.add_histogram(x=scores[y == 0], name="Benign", histnorm="probability density",
                       opacity=0.6, marker_color=C_BENIGN, nbinsx=60)
     fig.add_histogram(x=scores[y == 1], name="Malicious", histnorm="probability density",
                       opacity=0.6, marker_color=C_ATTACK, nbinsx=60)
+    fig.add_vline(x=cutoff, line_dash="dash", line_color="#FB8C00", line_width=3,
+                  annotation_text="◀ flagged | not flagged ▶", annotation_position="top")
     fig.update_layout(barmode="overlay", height=380,
                       margin=dict(l=10, r=10, t=30, b=10),
                       legend=dict(orientation="h", y=1.1),
@@ -89,7 +91,7 @@ def piles_fig(scores, y):
     return fig
 
 
-def cdf_fig(scores, y, ks):
+def cdf_fig(scores, y, ks, cutoff):
     grid = np.linspace(np.percentile(scores, 0.5), np.percentile(scores, 99.5), 400)
     cdf_b = np.searchsorted(np.sort(scores[y == 0]), grid, side="right") / (y == 0).sum()
     cdf_a = np.searchsorted(np.sort(scores[y == 1]), grid, side="right") / (y == 1).sum()
@@ -99,6 +101,8 @@ def cdf_fig(scores, y, ks):
     fig.add_scatter(x=grid, y=cdf_a, name="Malicious CDF", line=dict(color=C_ATTACK, width=3))
     fig.add_scatter(x=[grid[k], grid[k]], y=[cdf_b[k], cdf_a[k]], mode="lines+markers",
                     name=f"KS = {ks:.3f}", line=dict(color="#FB8C00", width=3, dash="dot"))
+    fig.add_vline(x=cutoff, line_dash="dash", line_color="#9E9E9E", line_width=2,
+                  annotation_text="threshold", annotation_position="bottom")
     fig.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10),
                       legend=dict(orientation="h", y=1.1),
                       xaxis_title="Isolation Forest anomaly score",
@@ -153,6 +157,10 @@ else:
 X, y = featurise(df)
 scores, pred, auc, ks, cm = run_if(X, y, contamination)
 
+# Decision boundary: the highest score still flagged as an anomaly at this threshold.
+flagged = scores[pred == 1]
+cutoff = float(flagged.max()) if flagged.size else float(scores.min())
+
 # Metrics
 tn, fp, fn, tp = cm.ravel()
 precision = tp / (tp + fp) if (tp + fp) else 0.0
@@ -168,12 +176,14 @@ st.markdown("---")
 left, right = st.columns(2)
 with left:
     st.subheader("The two score piles")
-    st.plotly_chart(piles_fig(scores, y), width='stretch')
-    st.caption("Where blue and red overlap, benign and malicious flows get the **same** score — unseparable.")
+    st.plotly_chart(piles_fig(scores, y, cutoff), width='stretch')
+    st.caption("Move the slider: the **orange threshold line slides**, but the piles never move. "
+               "Everything left of the line is flagged. The overlap is where you can't win.")
 with right:
     st.subheader("The ceiling (KS)")
-    st.plotly_chart(cdf_fig(scores, y, ks), width='stretch')
-    st.caption("The orange gap (**KS**) is the best (recall − false-alarm) **any** threshold can achieve.")
+    st.plotly_chart(cdf_fig(scores, y, ks, cutoff), width='stretch')
+    st.caption("The orange gap (**KS**) is the best (recall − false-alarm) **any** threshold can achieve — "
+               "it doesn't change when you move the grey threshold line.")
 
 with st.expander("Confusion matrix at this threshold"):
     cm_df = pd.DataFrame(cm, index=["Actual benign", "Actual attack"],
