@@ -2,6 +2,7 @@
 sample_logs/CTU13_Attack_Traffic.csv
 sample_logs/CTU13_Normal_Traffic.csv
 sample_logs/network_traffic.pcap
+sample_logs/unsw_nb15/
 
 # Claude internal directory
 .claude/
