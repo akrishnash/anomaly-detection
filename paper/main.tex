@@ -63,10 +63,13 @@ percentile threshold with an extreme-value-theoretic threshold
 where percentile thresholds overshoot by $3.8\times$. The resulting two-stage
 architecture --- fused zero-day net, gradient-boosted known-attack classifier,
 and a zero-day candidate queue --- achieves $F_1=0.945$ on CTU-13 with 87\%
-false-positive reduction, and in a controlled simulation withholding four
-attack families from the classifier, routes all four to the zero-day queue at
-71\% queue precision with zero misclassifications of hidden attacks as known
-types.
+false-positive reduction. In a controlled simulation withholding four attack
+families from the classifier entirely, the dual-head pipeline raises end-to-end
+zero-day routing of Backdoor from 5.0\% to 27.8\% and Analysis from 2.2\% to
+23.8\%, with zero-day queue precision of 86.7\%; of all hidden-family flows
+flagged by Stage~1, fewer than 1\% are cleared as benign --- the remainder
+reach an analyst either through the queue or as (family-misattributed) attack
+alerts.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -249,19 +252,68 @@ $\log(1{+}x)$ on skewed columns, standardisation) fitted on training partitions
 only.
 
 \section{The Two-Stage Architecture}\label{sec:system}
-% TODO: final numbers pending dual_head_detector.py (fused Stage 1 -> Stage 2 -> zero-day queue re-run).
 Stage~1: dual autoencoder heads (flow features; temporal/behavioural features),
-each trained on normal traffic only, thresholds set by Theorem~\ref{thm:evt},
-fused by OR per Theorem~\ref{thm:fusion}. Stage~2: gradient-boosted classifier
-over the flagged pool; flows below confidence $\tau=0.6$ enter the
-\emph{zero-day candidate queue}.
+each trained on normal traffic only, fused by OR per
+Theorem~\ref{thm:fusion}. Stage~2: gradient-boosted classifier over the
+flagged pool, trained on the five \emph{known} attack families only; flows
+below confidence $\tau=0.55$ enter the \emph{zero-day candidate queue}.
+Four families (Backdoor, Analysis, Shellcode, Worms) are withheld from
+Stage~2 at all times.
 
-Current single-head results: CTU-13 pipeline $F_1=0.945$ with an 87\%
-false-positive reduction over Stage~1 alone; zero-day simulation withholding
-Backdoor, Shellcode, Analysis and Worms from Stage~2 routes all four families
-to the queue (71\% queue precision, zero hidden-family misclassifications).
-The fused-head end-to-end evaluation is the final experiment before
-submission.
+\subsection{Stage-1 Ablation (UNSW-NB15 test)}
+\begin{table}[!t]
+\caption{Stage-1 configurations. Union is the proposed head; intersection is
+the control.}
+\label{tab:ablation}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Config & TPR & FPR & Backdoor & Analysis \\
+\midrule
+Flow head only        & 0.086 & 0.086 & 0.08 & 0.03 \\
+Temporal head only    & 0.440 & 0.073 & 0.39 & 0.35 \\
+\textbf{Union (ours)} & \textbf{0.491} & 0.143 & \textbf{0.41} & \textbf{0.35} \\
+Intersection (control)& 0.034 & 0.016 & 0.06 & 0.02 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:ablation} confirms Theorem~\ref{thm:fusion}: the union recall
+(0.491) matches the miss-product prediction (0.488), and the intersection
+control collapses as expected.
+
+\subsection{End-to-End Zero-Day Simulation}
+\begin{table}[!t]
+\caption{Full pipeline, identical Stage~2, only Stage~1 changes.}
+\label{tab:pipeline}
+\centering
+\begin{tabular}{lcc}
+\toprule
+Metric & Flow-only & Dual-head \\
+\midrule
+Pipeline recall     & 0.084 & \textbf{0.488} \\
+Pipeline precision  & 0.850 & \textbf{0.939} \\
+Pipeline $F_1$      & 0.152 & \textbf{0.643} \\
+Zero-day queue precision & 0.753 & \textbf{0.867} \\
+Backdoor end-to-end routing  & 5.0\% & \textbf{27.8\%} \\
+Analysis end-to-end routing  & 2.2\% & \textbf{23.8\%} \\
+Shellcode end-to-end routing & 0.5\% & 2.1\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The dual head raises pipeline $F_1$ by $4.2\times$ while \emph{increasing}
+precision (Table~\ref{tab:pipeline}). Of the 518 hidden-family flows flagged
+by Stage~1, 332 route to the zero-day queue, 182 are alerted as
+family-misattributed known attacks, and only 4 ($<1\%$) are cleared as benign:
+hidden attacks are misattributed, not missed. Family misattribution is an
+honest limitation --- the alert fires, but the analyst receives the wrong
+attack label. Shellcode remains largely undetected at Stage~1 (2.1\%): a
+single-shot exploit leaves neither a flow-statistical nor a temporal
+footprint, delimiting what flow-level detection can achieve.
+
+On CTU-13 the single-head pipeline attains $F_1=0.945$ with an 87\%
+false-positive reduction over Stage~1 alone.
 
 \section{Discussion and Limitations}\label{sec:discussion}
 % TODO: representation bottleneck (Shellcode ~1% at flow level), dataset vintage, Stage-2 label requirement.

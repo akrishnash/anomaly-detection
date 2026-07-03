@@ -24,10 +24,11 @@ ceiling by changing the *representation*, not the algorithm:
    form (0.488 predicted, 0.491 measured). Stage 1 recall: 8.6% → **49.1%**.
 5. **Thresholds are now parameter-free** (Theorem 3): a GPD tail fit calibrates the
    false-positive rate at any target, where percentile thresholds overshoot 3.8x.
-6. **The two-stage architecture works end-to-end**: Stage 1 (AE zero-day net) →
-   Stage 2 (GBM known-attack classifier) → zero-day candidate queue. CTU-13 F1=0.945
-   with 87% FP reduction; zero-day simulation routes 4 completely hidden attack
-   families to the queue at 71% precision with **zero** misclassifications as known types.
+6. **The two-stage architecture works end-to-end**: Stage 1 (dual-head AE zero-day net)
+   → Stage 2 (GBM known-attack classifier) → zero-day candidate queue. CTU-13 F1=0.945
+   with 87% FP reduction. Dual-head zero-day simulation: pipeline F1 0.152 → **0.643**,
+   Backdoor end-to-end 5% → **27.8%**, queue precision **86.7%**; of flagged hidden-family
+   flows, <1% are silently cleared — the rest reach an analyst (queue or misattributed alert).
 
 Target: IEEE TNSM / Computers & Security. Theory + validation are done; the last
 experiment before writing is wiring the dual-head Stage 1 into Stage 2.
@@ -197,13 +198,16 @@ Hold out 4 completely: **Backdoor, Shellcode, Analysis, Worms**.
 
 ```
 Zero-day queue: 1,555 flows (1.9% of test set) | 71% precision (1,097 real attacks)
-Stage 2: ZERO misclassifications of hidden types as known types
 Hidden types in queue: Backdoor=31, Analysis=17, Shellcode=4, Worms=1
 End-to-end hidden-type rate: 1-5% -> bottleneck is Stage 1 recall, not Stage 2
 ```
 
-The architecture claim is confirmed: novel attack families route to analyst review
-automatically. The remaining problem is Stage 1's blindness to low-volume stealthy flows.
+**Correction (found in Exp 10)**: the original claim "zero misclassifications of hidden
+types as known types" was an accounting artifact — Stage 2 could never predict a hidden
+label, so the per-type 'known' column read zero by construction. Exp 10 measures this
+properly: some flagged hidden flows ARE high-confidence classified as known attack types
+(misattribution). The honest statement: flagged hidden flows are alerted (queue or
+misattributed known-attack alert), almost never silently cleared. See Exp 10.
 
 ### Exp 8 — Temporal & Behavioral Features (`temporal_features.py`)
 
@@ -256,13 +260,55 @@ target FPR q=0.001: GPD threshold realizes 0.00049 (on target), percentile thres
 realizes 0.00378 (3.8x over budget). GPD replaces the arbitrary 95th-percentile
 threshold and extrapolates below data resolution. Zero free parameters at deployment.
 
+### Exp 10 — Dual-Head Two-Stage Detector (`dual_head_detector.py`) — FINAL SYSTEM
+
+The theory wired into one system: Stage 1 = flow-AE UNION temporal-AE (Thm 2),
+Stage 2 = GBM trained on 5 known types only, 4 types hidden (same protocol as Exp 7b).
+
+**Stage 1 ablation (UNSW-NB15 test):**
+
+| Config | TPR | FPR | Backdoor | Analysis | Shellcode | Worms |
+|---|---|---|---|---|---|---|
+| A1 flow only | 0.086 | 0.086 | 0.08 | 0.03 | 0.01 | 0.68 |
+| A2 temporal only | 0.440 | 0.073 | 0.39 | 0.35 | 0.02 | 0.18 |
+| **A3 UNION** | **0.491** | 0.143 | **0.41** | **0.35** | 0.02 | **0.70** |
+| A4 INTERSECTION (control) | 0.034 | 0.016 | 0.06 | 0.02 | 0.00 | 0.16 |
+
+Union recall 0.491 matches the Thm 2 miss-product prediction (0.488). Intersection
+control collapses as theory predicts.
+
+**Full pipeline, identical Stage 2, only Stage 1 changes:**
+
+| Metric | flow-only | dual-head |
+|---|---|---|
+| Pipeline recall | 0.084 | **0.488** (5.8x) |
+| Pipeline precision | 0.850 | **0.939** (also UP) |
+| Pipeline F1 | 0.152 | **0.643** (4.2x) |
+| ZD queue size | 1,135 | 3,624 |
+| ZD queue precision | 0.753 | **0.867** |
+| Backdoor end-to-end | 5.0% | **27.8%** |
+| Analysis end-to-end | 2.2% | **23.8%** |
+| Shellcode end-to-end | 0.5% | 2.1% |
+| Worms end-to-end | 0.0% | 2.3% |
+
+**Hidden-flow fate accounting (dual-head)**: of 518 hidden-family flows flagged by
+Stage 1: 332 -> zero-day queue, 182 -> alerted as (family-misattributed) known attacks,
+only 4 (<1%) silently cleared as Normal. Hidden attacks are misattributed, not missed.
+
+**Honest limitations**: (a) family misattribution — the alert fires but with the wrong
+attack label; (b) Shellcode stays ~2% — single-shot exploits leave no flow/temporal
+footprint, this is the boundary of flow-level detection; (c) GPD thresholds realize
+0.046 FPR vs 0.02 target on UNSW test — train/test normal-traffic drift breaks the
+stationarity assumption; deployment needs periodic refit (DSPOT-style).
+
 ### Paper — `paper/main.tex` (IEEE IEEEtran format)
 
 Created 2026-07-03. Contains: full abstract with all validated numbers, introduction
 with 4 contributions, complete Section III (Theoretical Framework — Theorems 1-3 with
 proofs, corollaries, propositions, and empirical validation paragraphs), dataset
-section, references. Experiments/discussion/conclusion sections stubbed with TODO
-markers — they get final numbers after `dual_head_detector.py` runs.
+section, **Section on the two-stage system with ablation + pipeline tables (Exp 10
+numbers)**, references. Compiles clean with pdflatex (MiKTeX). Remaining TODOs:
+related work expansion, discussion, conclusion.
 Markdown precursor `ieee_paper_draft.md` kept local-only by choice (research gates writing).
 
 ---
@@ -283,9 +329,10 @@ Markdown precursor `ieee_paper_draft.md` kept local-only by choice (research gat
 - **Temporal features alone**: Backdoor 39%, Analysis 35% — TTL and ct_state_ttl are the key signal
 - **IAT features on CTU-13**: F1 lifts to 0.857, KS=0.830 — significant gain
 - **Dual-head OR-fusion**: Stage 1 recall 8.6% -> 49.1%, predicted by the miss-product law
-- **Two-stage pipeline**: F1=0.945, 87% FP reduction on CTU-13
-- **Zero-day queue**: 71% precision — hidden types route automatically, zero false classifications
-- **GPD thresholds**: calibrated FPR at any target, no tuning parameter
+- **Dual-head full pipeline**: F1 0.152 -> 0.643 with precision UP (0.850 -> 0.939)
+- **Two-stage pipeline on CTU-13**: F1=0.945, 87% FP reduction
+- **Zero-day queue**: 86.7% precision (dual-head); <1% of flagged hidden flows silently cleared
+- **GPD thresholds**: calibrated FPR within-distribution; needs periodic refit under drift
 
 ---
 
@@ -299,10 +346,10 @@ Markdown precursor `ieee_paper_draft.md` kept local-only by choice (research gat
 | 4 | Two-stage pipeline + zero-day simulation | Done |
 | 5 | Temporal features experiment | Done |
 | 6 | Theory layer: 3 theorems proven + validated | Done |
-| 7 | IEEE LaTeX draft (theory section complete) | In progress |
-| 8 | `dual_head_detector.py`: fused Stage 1 -> Stage 2 -> zero-day sim re-run | **Next** |
-| 9 | Ablations (Stage 2 off, threshold sweep, classifier swap) | After 8 |
-| 10 | Finish paper: experiments/discussion/conclusion sections | After 9 |
+| 7 | Dual-head detector + Stage 1 ablation (Exp 10) | Done |
+| 8 | IEEE LaTeX draft — theory + system sections with final numbers | In progress |
+| 9 | Finish paper: related work, discussion, conclusion | **Next** |
+| 10 | Optional hardening: 3rd dataset (CIC-IDS-2018), Stage 2 classifier swap ablation | If time allows |
 
 Open items besides the roadmap: third dataset (CIC-IDS-2018) would harden the
 generalisation claim; streaming Stage 1 (RRCF) is the org-deployment track, separate

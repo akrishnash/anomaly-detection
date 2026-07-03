@@ -127,7 +127,18 @@ Go/no-go result from `temporal_features.py`:
 **Implication for architecture**: Stage 1 needs two parallel AE heads, not one.
 Naive concatenation doesn't work. Selective feature sets, separately trained.
 
-### Act 5 — Dual-Head Stage 1 (NEXT)
+### Act 5 — Dual-Head Stage 1 (DONE — see PROGRESS.md Exp 10)
+
+Results: pipeline F1 0.152 -> 0.643 (4.2x) with precision UP (0.850 -> 0.939);
+Backdoor end-to-end 5.0% -> 27.8%, Analysis 2.2% -> 23.8%; ZD queue precision 0.867;
+intersection control collapsed (TPR 0.034) as Thm 2 predicts; union recall 0.491
+matched the miss-product prediction 0.488. Correction logged: "zero misclassification"
+claim from Exp 7b replaced by honest fate-accounting (<1% of flagged hidden flows
+silently cleared; 35% family-misattributed). Paper tables updated in paper/main.tex.
+
+Original plan below for the record:
+
+### Act 5 (original) — Dual-Head Stage 1
 
 **Architecture revision:**
 
