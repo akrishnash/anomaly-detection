@@ -184,8 +184,27 @@ both heads separately and combined. Show the union beats any single head.
 | `zero_day_sim.py` | Zero-day simulation (4 hidden types) | Done |
 | `temporal_features.py` | Temporal vs flow feature experiment | Done |
 | `explain_isolation_forest.py` | Educational IF walkthrough | Done |
-| `dual_head_detector.py` | Flow-AE + Temporal-AE union head | **Next** |
+| `theory.md` | Three theorems: KS ceiling, OR-fusion law, EVT thresholds | Done |
+| `validate_theory.py` | All theorems verified on CTU-13 + UNSW-NB15 | Done |
+| `dual_head_detector.py` | Dual-head Stage 1 wired into Stage 2 + zero-day queue | **Next** |
 | `paper_figures.py` | Final publication figures | Planned |
+
+---
+
+## Theory Layer (added 2026-07-03)
+
+The paper now has three theorems, all validated (`validate_theory.py`, `graphs/theory_validation.png`):
+
+1. **KS ceiling theorem**: sup_t J(t) = KS — exact on empirical CDFs. AE runs AT its
+   ceiling (0.929 observed vs 0.931 bound) — only representation changes can improve it.
+2. **Miss-product law**: dual-head union recall predicted 0.488 in closed form, measured
+   0.491. rho_miss = 0.994 — heads are conditionally independent. Union Stage 1 recall
+   49.1% vs 8.6% flow-only.
+3. **EVT thresholds**: GPD tail fit (xi = 1.12, heavy) gives calibrated FPR at any target;
+   percentile thresholds overshoot 3.8x at q=0.001. Removes the last free parameter.
+
+Remaining for the paper: wire dual-head Stage 1 into Stage 2 (`dual_head_detector.py`),
+re-run the zero-day simulation with the fused Stage 1, then write.
 
 ---
 

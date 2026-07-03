@@ -161,6 +161,37 @@ CTU-13 — core vs core+IAT temporal: F1 lifts from 0.577 to 0.857, KS from 0.66
 **Implication**: Stage 1 needs two parallel heads — flow-AE for known attack recall,
 temporal-AE for hidden/stealthy attack recall. Naive concatenation doesn't work.
 
+### Exp 9 — Theorem Validation (`theory.md` + `validate_theory.py`)
+
+Three theorems formalised and validated on real data:
+
+**Theorem 1 (KS ceiling)** — sup_t J(t) = KS proven and verified to machine precision
+(diff = 0 for AE, 5.6e-17 for IF on CTU-13). Corollaries confirmed:
+- BA ceiling (1+KS)/2: AE = 0.931 predicted, 0.929 observed — AE operates AT its ceiling
+- Recall bound at 5% FPR budget: IF <= 0.507 (explains the 55% plateau in one line)
+- KS >= AUC - 1/2 holds for both detectors
+
+**Theorem 2 (OR-fusion miss-product law)** — under conditional independence,
+union miss rate = product of head miss rates. Validated on UNSW-NB15 dual heads:
+
+| Quantity | Predicted (closed form) | Actual |
+|---|---|---|
+| Union recall | 0.488 | **0.491** |
+| Union FPR | 0.152 | 0.143 |
+| rho_miss (independence test) | 1.000 if independent | **0.994** |
+
+The flow-AE and temporal-AE heads are *empirically conditionally independent*
+(rho_miss = 0.99, conditional MI = 0.28 bits). The dual-head union is not a heuristic —
+it follows a law. Per-type rho_miss all in [1.00, 1.13].
+Fusion-benefit criterion satisfied with 6x margin.
+**Union Stage 1 recall: 49.1% overall vs 8.6% flow-only** — Backdoor 41%, Analysis 35%, Worms 70%.
+
+**Theorem 3 (EVT/GPD thresholds)** — normal-traffic MSE tail fitted with Generalized
+Pareto: shape xi = 1.12 (extremely heavy tail — infinite variance). Calibration at
+target FPR q=0.001: GPD threshold realizes 0.00049 (on target), percentile threshold
+realizes 0.00378 (3.8x over budget). GPD is the principled replacement for the
+arbitrary 95th-percentile threshold and extrapolates below data resolution.
+
 ---
 
 ## What We Know Doesn't Work
