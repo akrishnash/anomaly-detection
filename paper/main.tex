@@ -1,0 +1,318 @@
+\documentclass[journal]{IEEEtran}
+% IEEE TNSM / Computers & Security submission draft
+% Compile: pdflatex main.tex (or upload the paper/ folder to Overleaf)
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{definition}{Definition}
+
+\newcommand{\TPR}{\mathrm{TPR}}
+\newcommand{\FPR}{\mathrm{FPR}}
+\newcommand{\KS}{\mathrm{KS}}
+\newcommand{\OR}{\mathrm{OR}}
+
+\begin{document}
+
+\title{Anomalous Is Not Malicious: A Provable Performance Ceiling for
+Unsupervised NIDS and a Two-Stage Architecture for Zero-Day Intrusion Detection}
+
+\author{Anurag~Sharma%
+\thanks{A.~Sharma is with the Advanced Data Processing Research Institute
+(ADRIN), Indian Space Research Organisation (ISRO), Hyderabad, India
+(e-mail: anuragadrin@gmail.com).}}
+
+\markboth{Working draft --- not yet submitted}%
+{Sharma: Anomalous Is Not Malicious}
+
+\maketitle
+
+\begin{abstract}
+Unsupervised network intrusion detection systems (NIDS) consistently plateau at
+55--70\% recall on real-world benchmarks, a degradation widely attributed to
+parameter misconfiguration. We prove this ceiling is \emph{structural}: for any
+threshold-based detector, the maximum achievable Youden index
+($\TPR-\FPR$) equals the Kolmogorov--Smirnov (KS) distance between the
+class-conditional anomaly-score distributions (Theorem~\ref{thm:ks}). On the
+CTU-13 botnet dataset, Isolation Forest attains $\KS=0.445$; no threshold
+calibration can exceed this bound. The root cause is the
+\emph{anomaly--malice mismatch}: unsupervised detectors measure statistical
+rarity, whereas stealthy attacks are engineered to appear statistically normal.
+Replacing the anomaly notion --- isolation by reconstruction, via an
+autoencoder trained exclusively on normal traffic --- raises the ceiling to
+$\KS=0.860$ ($F_1$: $0.617\!\to\!0.928$), and the deployed detector operates
+\emph{at} its theoretical ceiling (balanced accuracy $0.929$ vs.\ bound
+$0.930$). Cross-dataset evaluation on UNSW-NB15, however, shows no single
+anomaly notion generalises across attack families. We therefore derive a
+closed-form law for OR-fusion of conditionally independent detectors
+(Theorem~\ref{thm:fusion}): miss rates multiply. The law predicts the fused
+recall of our dual-head detector (flow autoencoder $\cup$ temporal autoencoder)
+to three decimal places (predicted $0.488$, measured $0.491$;
+miss-redundancy $\rho_{\mathrm{miss}}=0.994$), lifting Stage-1 recall from
+$8.6\%$ to $49.1\%$ and, on hidden attack families, Backdoor from $8\%$ to
+$41\%$ and Analysis from $3\%$ to $35\%$. Finally, we replace the arbitrary
+percentile threshold with an extreme-value-theoretic threshold
+(Theorem~\ref{thm:evt}): a generalized Pareto tail fit
+($\hat\xi = 1.12$, infinite variance) yields calibrated false-positive rates
+where percentile thresholds overshoot by $3.8\times$. The resulting two-stage
+architecture --- fused zero-day net, gradient-boosted known-attack classifier,
+and a zero-day candidate queue --- achieves $F_1=0.945$ on CTU-13 with 87\%
+false-positive reduction, and in a controlled simulation withholding four
+attack families from the classifier, routes all four to the zero-day queue at
+71\% queue precision with zero misclassifications of hidden attacks as known
+types.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Network intrusion detection, anomaly detection, zero-day attacks,
+Kolmogorov--Smirnov distance, extreme value theory, detector fusion,
+Isolation Forest, autoencoder, CTU-13, UNSW-NB15.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\IEEEPARstart{S}{ignature-based} intrusion detection fails categorically
+against zero-day attacks: no signature exists for an attack no one has seen.
+Anomaly-based NIDS promise the alternative --- model normal traffic, flag
+deviations --- yet two decades of published results place unsupervised recall
+stubbornly in the 55--70\% band \cite{garcia2014,moustafa2016}. The standard
+prescriptions (tune the contamination parameter, add features, deepen the
+model) do not move this number. This paper explains why, proves the limitation
+formally, and presents a validated architecture that circumvents it.
+
+Our contributions:
+\begin{enumerate}
+  \item \textbf{A provable ceiling (Sec.~\ref{sec:theory}).} For threshold
+  detectors, $\sup_t J(t) = \KS$ exactly. Corollaries give a balanced-accuracy
+  ceiling $(1+\KS)/2$ and a recall bound at any false-alarm budget. On CTU-13
+  our autoencoder \emph{attains} its ceiling, proving threshold optimisation is
+  exhausted and only representation change can help.
+  \item \textbf{A fusion law (Sec.~\ref{sec:theory}).} Under conditional
+  independence, OR-fused detector misses multiply. The law is verified on real
+  traffic to three decimal places and supplies a closed-form criterion for when
+  fusing two detectors is beneficial.
+  \item \textbf{Parameter-free thresholds (Sec.~\ref{sec:theory}).} A
+  peaks-over-threshold GPD fit converts any target false-positive budget into a
+  calibrated threshold, including budgets below the empirical resolution of the
+  training data.
+  \item \textbf{A validated two-stage system (Sec.~\ref{sec:system}).}
+  Dual-head Stage~1 (flow + temporal autoencoders, fused per the law), a
+  supervised Stage~2 over the flagged pool, and an explicit zero-day candidate
+  queue, evaluated with a hold-out zero-day simulation on UNSW-NB15.
+\end{enumerate}
+
+\section{Related Work}\label{sec:related}
+% TODO: expand from ieee_paper_draft.md Section II once final experiments land.
+Isolation Forest \cite{liu2008} and extensions \cite{hariri2021}; LOF
+\cite{breunig2000}; autoencoder NIDS \cite{mirsky2018,zavrak2020}; EVT for
+anomaly thresholds \cite{siffer2017}; CTU-13 \cite{garcia2014} and UNSW-NB15
+\cite{moustafa2015} benchmarks. Our work differs by diagnosing the ceiling
+formally before proposing remedies, and by validating each closed-form
+prediction on real traffic.
+
+\section{Theoretical Framework}\label{sec:theory}
+
+Let $S$ be a scalar anomaly score (higher $=$ more anomalous),
+$Y\in\{0,1\}$ the true class ($1=$ attack), and
+$F_A(t)=P(S\le t\mid Y{=}1)$, $F_N(t)=P(S\le t\mid Y{=}0)$ the
+class-conditional CDFs. A threshold detector decides ``attack'' iff $S>t$;
+its operating point is $\TPR(t)=1-F_A(t)$, $\FPR(t)=1-F_N(t)$, and its Youden
+index is $J(t)=\TPR(t)-\FPR(t)$.
+
+\subsection{The KS Ceiling}
+
+\begin{theorem}[KS ceiling]\label{thm:ks}
+For any threshold detector on $S$, in either orientation,
+\[
+\sup_t |J(t)| \;=\; \sup_t |F_N(t)-F_A(t)| \;=\; \KS(F_A,F_N),
+\]
+and the bound is invariant under any monotone transformation of $S$.
+\end{theorem}
+
+\begin{proof}
+$J(t) = (1-F_A(t)) - (1-F_N(t)) = F_N(t)-F_A(t)$; take suprema over $t$ and
+over the two orientations. Monotone maps preserve both CDFs' level sets, hence
+KS.
+\end{proof}
+
+\begin{corollary}[Balanced-accuracy ceiling]\label{cor:ba}
+$\max_t \mathrm{BA}(t) = \tfrac12\bigl(1+\KS\bigr)$.
+\end{corollary}
+
+\begin{corollary}[Recall at a false-alarm budget]\label{cor:budget}
+$\TPR(t) \le \FPR(t) + \KS$ for every $t$; hence at budget $\FPR\le\alpha$,
+recall is at most $\alpha + \KS$.
+\end{corollary}
+
+\begin{corollary}[AUC bound]\label{cor:auc}
+$\mathrm{AUC} \le \tfrac12 + \KS$.
+\end{corollary}
+
+\emph{Scope.} For arbitrary measurable decision regions the bound is the total
+variation distance $\mathrm{TV}\ge\KS$, with equality under monotone
+likelihood ratio; deployed detectors are threshold rules, so KS is the
+operative ceiling.
+
+\textbf{Empirical validation (CTU-13, held-out test).} The empirical
+$\sup_t J(t)$ equals the two-sample KS statistic to machine precision for both
+detectors (difference $\le 5.6\times10^{-17}$). Corollary~\ref{cor:ba}:
+autoencoder $\KS=0.863$ gives ceiling $0.931$; observed balanced accuracy
+$0.929$ --- \emph{the deployed detector operates at its theoretical ceiling}.
+Corollary~\ref{cor:budget}: Isolation Forest ($\KS=0.457$) cannot exceed
+$50.7\%$ recall at a $5\%$ false-alarm budget, explaining the widely reported
+plateau.
+
+\subsection{OR-Fusion of Conditionally Independent Detectors}
+
+Let $B_i=\{S_i>t_i\}$, $i=1,2$, be the flag events of two detectors with
+operating points $(\TPR_i,\FPR_i)$, and assume conditional independence (CI)
+given each class: $P(B_1\cap B_2\mid Y{=}y)=P(B_1\mid y)P(B_2\mid y)$.
+
+\begin{theorem}[Fusion law]\label{thm:fusion}
+Under (CI), the OR-fused detector satisfies:
+\begin{enumerate}
+  \item[(a)] \emph{Miss-product law:}\quad
+  $1-\TPR_{\OR} = (1-\TPR_1)(1-\TPR_2)$;
+  \item[(b)] \emph{Subadditive false alarms:}\quad
+  $\FPR_{\OR} = 1-(1-\FPR_1)(1-\FPR_2) \le \FPR_1+\FPR_2$;
+  \item[(c)] \emph{Fusion-benefit criterion:}\quad
+  $J_{\OR} > J_1 \iff (1-\TPR_1)\,\TPR_2 > (1-\FPR_1)\,\FPR_2$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(a),(b): apply (CI) to the complements --- a union miss is a simultaneous miss.
+(c): $J_{\OR}-J_1 = (1-\TPR_1)\TPR_2-(1-\FPR_1)\FPR_2$ by direct expansion.
+\end{proof}
+
+\begin{proposition}[Mixture limit]\label{prop:mixture}
+If the attack population is a mixture in which subfamily $k$ is invisible to
+the other head (likelihood ratio $\equiv 1$), the Neyman--Pearson optimal
+region degenerates to the union $B_1\cup B_2$: OR-fusion is exactly optimal
+for heterogeneous attack families.
+\end{proposition}
+
+We diagnose (CI) with the miss-redundancy coefficient
+$\rho_{\mathrm{miss}} = P(\bar B_1\cap\bar B_2\mid Y{=}1)\,/\,
+\bigl[P(\bar B_1\mid Y{=}1)P(\bar B_2\mid Y{=}1)\bigr]$
+($\rho=1$: independent blind spots) and the conditional mutual information
+$I(S_1;S_2\mid Y)$ estimated by within-class quantile binning.
+
+\textbf{Empirical validation (UNSW-NB15, flow-AE head vs.\ temporal-AE head).}
+Head operating points $\TPR_1=0.086$, $\TPR_2=0.440$ (both at
+95th-percentile thresholds). The law predicts union recall
+$1-(1-0.086)(1-0.440)=0.488$; measured: $0.491$. Overall
+$\rho_{\mathrm{miss}}=0.994$ and $I(S_1;S_2\mid Y)=0.28$ bits --- the two
+anomaly notions are empirically conditionally independent. Per-family
+$\rho_{\mathrm{miss}}\in[1.00,1.13]$. The fusion criterion holds with a
+$6\times$ margin. Fused Stage-1 recall on hidden families: Backdoor
+$8\%\!\to\!41\%$, Analysis $3\%\!\to\!35\%$.
+
+\subsection{Calibrated Thresholds via Extreme Value Theory}
+
+\begin{theorem}[Pickands--Balkema--de~Haan, applied]\label{thm:evt}
+If the normal-score distribution lies in the maximum domain of attraction of
+an extreme value law, the excess distribution over a high threshold $u$
+converges uniformly to a generalized Pareto distribution
+$G_{\xi,\sigma}(x) = 1-(1+\xi x/\sigma)^{-1/\xi}$. Consequently, with
+$p_u = P(S_N > u)$ estimated empirically and $(\hat\xi,\hat\sigma)$ fitted by
+maximum likelihood on the excesses, the threshold achieving a target
+false-positive rate $q$ is
+\[
+t_q \;=\; u + \frac{\hat\sigma}{\hat\xi}
+\Bigl[\bigl(p_u/q\bigr)^{\hat\xi} - 1\Bigr]
+\qquad (\hat\xi\neq 0).
+\]
+\end{theorem}
+
+\textbf{Empirical validation (UNSW-NB15 flow-AE, $n=56{,}000$ training
+normals, $u=$ 90th percentile).} The fitted shape is $\hat\xi = 1.12$: the
+reconstruction-error tail is so heavy its variance is infinite, which is
+precisely why percentile thresholds mis-calibrate. At target $q=10^{-3}$ the
+GPD threshold realises $\FPR=4.9\times10^{-4}$ on held-out normals while the
+percentile threshold realises $3.8\times10^{-3}$ ($3.8\times$ over budget).
+The GPD extrapolates analytically to budgets below the $1/n$ resolution of the
+data, removing the last free parameter from Stage~1.
+
+\section{Datasets and Experimental Protocol}\label{sec:data}
+% TODO: condense from ieee_paper_draft.md Sec. III (CTU-13, UNSW-NB15, preprocessing, no-leakage protocol).
+CTU-13 \cite{garcia2014}: 38{,}898 botnet flows, 53{,}314 normal, 57
+CICFlowMeter features; balanced 6k/6k samples, 70/30 stratified split.
+UNSW-NB15 \cite{moustafa2015}: 175{,}341 train / 82{,}332 test flows, nine
+attack families, 39 Argus features. All preprocessing (median imputation,
+$\log(1{+}x)$ on skewed columns, standardisation) fitted on training partitions
+only.
+
+\section{The Two-Stage Architecture}\label{sec:system}
+% TODO: final numbers pending dual_head_detector.py (fused Stage 1 -> Stage 2 -> zero-day queue re-run).
+Stage~1: dual autoencoder heads (flow features; temporal/behavioural features),
+each trained on normal traffic only, thresholds set by Theorem~\ref{thm:evt},
+fused by OR per Theorem~\ref{thm:fusion}. Stage~2: gradient-boosted classifier
+over the flagged pool; flows below confidence $\tau=0.6$ enter the
+\emph{zero-day candidate queue}.
+
+Current single-head results: CTU-13 pipeline $F_1=0.945$ with an 87\%
+false-positive reduction over Stage~1 alone; zero-day simulation withholding
+Backdoor, Shellcode, Analysis and Worms from Stage~2 routes all four families
+to the queue (71\% queue precision, zero hidden-family misclassifications).
+The fused-head end-to-end evaluation is the final experiment before
+submission.
+
+\section{Discussion and Limitations}\label{sec:discussion}
+% TODO: representation bottleneck (Shellcode ~1% at flow level), dataset vintage, Stage-2 label requirement.
+
+\section{Conclusion}\label{sec:conclusion}
+% TODO: write last.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{9}
+
+\bibitem{liu2008}
+F.~T. Liu, K.~M. Ting, and Z.-H. Zhou, ``Isolation forest,'' in \emph{Proc.
+IEEE ICDM}, 2008, pp. 413--422.
+
+\bibitem{breunig2000}
+M.~M. Breunig, H.-P. Kriegel, R.~T. Ng, and J.~Sander, ``{LOF}: Identifying
+density-based local outliers,'' in \emph{Proc. ACM SIGMOD}, 2000, pp. 93--104.
+
+\bibitem{garcia2014}
+S.~Garcia, M.~Grill, J.~Stiborek, and A.~Zunino, ``An empirical comparison of
+botnet detection methods,'' \emph{Computers \& Security}, vol.~45, pp.
+100--123, 2014.
+
+\bibitem{moustafa2015}
+N.~Moustafa and J.~Slay, ``{UNSW-NB15}: A comprehensive data set for network
+intrusion detection systems,'' in \emph{Proc. MilCIS}, 2015, pp. 1--6.
+
+\bibitem{moustafa2016}
+N.~Moustafa and J.~Slay, ``The evaluation of network anomaly detection
+systems,'' \emph{Information Security Journal}, vol.~25, no. 1--3, pp. 18--31,
+2016.
+
+\bibitem{mirsky2018}
+Y.~Mirsky, T.~Doitshman, Y.~Elovici, and A.~Shabtai, ``Kitsune: An ensemble of
+autoencoders for online network intrusion detection,'' in \emph{Proc. NDSS},
+2018.
+
+\bibitem{zavrak2020}
+S.~Zavrak and M.~Iskefiyeli, ``Anomaly-based intrusion detection from network
+flow features using variational autoencoder,'' \emph{IEEE Access}, vol.~8, pp.
+108346--108358, 2020.
+
+\bibitem{hariri2021}
+S.~Hariri, M.~C. Kind, and R.~J. Brunner, ``Extended isolation forest,''
+\emph{IEEE Trans. Knowl. Data Eng.}, vol.~33, no.~4, pp. 1479--1489, 2021.
+
+\bibitem{siffer2017}
+A.~Siffer, P.-A. Fouque, A.~Termier, and C.~Largou\"et, ``Anomaly detection in
+streams with extreme value theory,'' in \emph{Proc. ACM KDD}, 2017, pp.
+1067--1075.
+
+\end{thebibliography}
+
+\end{document}

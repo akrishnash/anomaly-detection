@@ -7,6 +7,15 @@ sample_logs/unsw_nb15/
 # Claude internal directory
 .claude/
 
+# LaTeX build artifacts (commit main.tex + main.pdf only)
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz
+
 # Python
 __pycache__/
 *.py[cod]
