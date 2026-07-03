@@ -131,32 +131,54 @@ Per-attack-type recall (AE vs IF):
 **Finding**: best anomaly notion is attack-type dependent.
 No single unsupervised detector generalises across all attack families.
 
-### Exp 7 — Two-Stage Pipeline (`stage2_supervised.py`) — IN PROGRESS
+### Exp 7 — Two-Stage Pipeline (`stage2_supervised.py`)
 
-Architecture:
-  Stage 1 (AE) flags anomalies → Stage 2 (XGBoost) classifies known attacks →
-  residual = zero-day queue
+CTU-13 (70/30 split): Stage 1 alone F1=0.927, Full pipeline F1=0.945, **87% FP reduction** (84 to 11).
+UNSW-NB15: Limited gain — bottleneck is Stage 1 recall (33%), not false positives.
 
-Target metrics:
-  - Stage 2 precision on known attacks: >90%
-  - Zero-day queue FPR: <10%
-  - Stage 2 reduces Stage 1 false positives by: >60%
+### Exp 7b — Zero-Day Simulation (`zero_day_sim.py`)
+
+Train Stage 2 on 5 known types. Hold out 4 completely: Backdoor, Shellcode, Analysis, Worms.
+Zero-day queue: 1,555 flows, 71% precision. Zero Stage 2 misclassifications of hidden types.
+End-to-end rate 1-5% — bottleneck is Stage 1 recall, not Stage 2.
+
+### Exp 8 — Temporal & Behavioral Features (`temporal_features.py`)
+
+UNSW-NB15 — flow only vs temporal only vs combined:
+
+| Feature set | Backdoor recall | Analysis recall | Overall recall | KS |
+|---|---|---|---|---|
+| Flow only (baseline) | 8.1% | 2.7% | 8.6% | 0.414 |
+| **Temporal only** | **39.1%** | **34.7%** | **44.0%** | **0.438** |
+| Flow + Temporal combined | 11.8% | 5.5% | 31.0% | 0.323 |
+
+Temporal alone lifts Backdoor 4.8x and Analysis 12x. Combining hurts (dimensionality dilution).
+Key signal: **TTL values**, not beacon periodicity. sttl d=+2.51 for Backdoor, ct_state_ttl d=+1.51.
+Shellcode remains ~1% regardless — single-shot exploit, no temporal signature.
+
+CTU-13 — core vs core+IAT temporal: F1 lifts from 0.577 to 0.857, KS from 0.664 to 0.830.
+
+**Implication**: Stage 1 needs two parallel heads — flow-AE for known attack recall,
+temporal-AE for hidden/stealthy attack recall. Naive concatenation doesn't work.
 
 ---
 
 ## What We Know Doesn't Work
 
-- **Naive all-features IF**: Curse of dimensionality → worse than 10-feature baseline
-- **Fixed contamination**: PR optimal threshold ≠ contamination-implied threshold
-- **LOF for botnet**: Botnet flows cluster together → not locally sparse → KS=0.155
-- **Simple ensemble average**: Weak detector (LOF) drags down strong (AE) → worse than AE alone
-- **AE alone for Fuzzers/Shellcode**: Random-payload attacks produce scattered MSE → low recall
+- **Naive all-features IF**: Curse of dimensionality — worse than 10-feature baseline
+- **Fixed contamination**: PR optimal threshold differs from contamination-implied threshold
+- **LOF for botnet**: Botnet flows cluster — not locally sparse — KS=0.155
+- **Simple ensemble average**: Weak LOF drags down AE — KS drops 0.860 to 0.606
+- **AE alone for Fuzzers/Shellcode**: Random-payload/single-shot — low recall regardless
+- **Flow + Temporal combined naively**: Dimensionality dilution — worse than temporal alone
 
 ## What Works
 
-- **AE trained on normal only**: KS=0.860 on CTU-13, structural attack/normal gap
-- **AE precision**: Stays high (82-95%) across CTU-13 and UNSW-NB15
-- **Two-stage architecture**: Stage 1 zero-day net + Stage 2 known-attack classifier
+- **AE on flow features**: KS=0.860 on CTU-13, F1=0.928 — strong for structured C&C attacks
+- **Temporal features alone**: Backdoor 39%, Analysis 35% — TTL and ct_state_ttl are the key signal
+- **IAT features on CTU-13**: F1 lifts to 0.857, KS=0.830 — significant gain
+- **Two-stage pipeline**: F1=0.945, 87% FP reduction on CTU-13
+- **Zero-day queue**: 71% precision — hidden types route automatically, zero false classifications
 
 ---
 
@@ -167,6 +189,7 @@ Target metrics:
 | 1 | IF baseline + KS diagnosis | Done |
 | 2 | AE vs IF comparison (CTU-13) | Done |
 | 3 | Cross-dataset validation (UNSW-NB15) | Done |
-| 4 | Two-stage pipeline (Stage 2 XGBoost) | **In progress** |
-| 5 | Zero-day queue analysis | Next |
-| 6 | Paper write-up | After step 5 |
+| 4 | Two-stage pipeline + zero-day simulation | Done |
+| 5 | Temporal features experiment | Done |
+| 6 | Dual-head Stage 1 (flow-AE + temporal-AE) | **Next** |
+| 7 | Paper write-up | After step 6 |

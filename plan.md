@@ -111,39 +111,62 @@ generalises across all categories. Two-stage architecture resolves this.
 - **Key result**: Stage 2 never misclassifies a hidden attack as a known type.
   Bottleneck = Stage 1 recall on low-volume attacks (2–13% on Backdoor/Shellcode).
 
-### Act 4 — Break the Stage 1 Bottleneck (NEXT)
+### Act 4 — Temporal Features Experiment (DONE)
 
-The zero-day simulation proved the architecture works.
-The remaining gap: Stage 1 only flags 2–13% of Backdoor/Shellcode/Analysis.
-These attacks look normal *per-flow* — they're only visible over time or as a graph.
+Go/no-go result from `temporal_features.py`:
 
-**Priority 1 — Temporal features** (`temporal_features.py`)
-  - Group flows by source IP, 30-second windows
-  - Compute: beacon regularity (FFT on inter-arrival times), session entropy,
-    burst ratio, connection fan-out to unique destination IPs
-  - Re-train AE on temporal feature vectors
-  - **Go/no-go test**: does Stage 1 recall on Backdoor/Analysis lift from ~10% to 40%+?
-  - If yes → strong paper punchline. If no → confirms representation limit is deeper.
+**UNSW-NB15:**
+- Temporal features *alone* lift Backdoor recall 8% → 39% (4.8x) and Analysis 3% → 35% (12x)
+- Combining flow + temporal hurts (dimensionality dilution — same curse as IF + 57 features)
+- Key signal: `sttl` (source TTL, d=+2.51) and `ct_state_ttl` (d=+1.51), not beacon timing
+- Shellcode remains ~1% — single-shot exploit, no temporal footprint
 
-**Priority 2 — Contrastive AE** (`contrastive_ae.py`)
-  - Replace MSE reconstruction loss with SimCLR-style contrastive loss
-  - Normal flows attract in embedding space; any anomalous flow naturally repels
-  - Target: fix Fuzzers recall (AE=8%, IF=29%) without sacrificing CTU-13 numbers
-  - Uses same zero-label constraint — no attack data needed
+**CTU-13:**
+- Adding IAT temporal features lifts F1 0.577 → 0.857, KS 0.664 → 0.830
 
-**Priority 3 — Paper figures** (`paper_figures.py`)
-  - Final publication-quality versions of 4 panels:
-    1. KS ceiling bar chart (IF vs LOF vs AE vs ensemble)
-    2. Attack-type AE vs IF recall heatmap (UNSW-NB15)
-    3. Two-stage pipeline diagram with metrics
-    4. Zero-day queue composition (pie + hidden-type bar)
+**Implication for architecture**: Stage 1 needs two parallel AE heads, not one.
+Naive concatenation doesn't work. Selective feature sets, separately trained.
 
-### Act 5 — Write (starts after Priority 1 result known)
-- [ ] Section 4 (experiments): tables are final, write captions first
-- [ ] Section 3 (datasets): 1 page
-- [ ] Section 5 (discussion): "anomalous != malicious" framing
-- [ ] Section 1 (introduction): write last
-- [ ] Abstract: write after introduction
+### Act 5 — Dual-Head Stage 1 (NEXT)
+
+**Architecture revision:**
+
+```
+All traffic
+    │
+    ├── Flow-AE (core flow features)        → good at Generic, Exploits, C&C
+    │
+    └── Temporal-AE (TTL + ct_* features)   → good at Backdoor, Analysis
+              │
+              └── Union of flags → SUSPICIOUS POOL
+                                        │
+                                        ▼
+                                Stage 2: GBM classifier
+                                        │
+                              known → alert | unknown → zero-day queue
+```
+
+**Build** `dual_head_detector.py`:
+  - Head 1: AE on flow features (existing, reuse ensemble_detector.py code)
+  - Head 2: AE on temporal features only (sttl, ct_state_ttl, ct_dst_sport_ltm, sinpkt)
+  - Union flag: flagged by either head → suspicious pool
+  - Stage 2: same GBM as before
+  - Expected lift: Backdoor end-to-end from 5% to 30%+; Analysis from 3% to 25%+
+
+**Key metric to report**: end-to-end recall on all 9 UNSW-NB15 attack types,
+both heads separately and combined. Show the union beats any single head.
+
+**Ablation** (required for IEEE reviewers):
+  - Head 1 only (baseline, already have it)
+  - Head 2 only
+  - Head 1 + Head 2 union
+  - Intersection instead of union (control experiment — should be worse)
+
+### Act 6 — Write (after dual-head result)
+- [ ] Section 4: add Exp 8 (temporal) + Exp 9 (dual-head) to tables
+- [ ] Section 5 (discussion): update with "TTL signature, not periodicity" finding
+- [ ] Section 1 (introduction): write after all results known
+- [ ] Abstract: finalise last
 - [ ] **Target**: 8-page Computers & Security short paper
 
 ---
@@ -159,9 +182,9 @@ These attacks look normal *per-flow* — they're only visible over time or as a 
 | `ensemble_detector.py` | IF + LOF + AE comparison | Done |
 | `stage2_supervised.py` | Two-stage pipeline (CTU-13 + UNSW) | Done |
 | `zero_day_sim.py` | Zero-day simulation (4 hidden types) | Done |
+| `temporal_features.py` | Temporal vs flow feature experiment | Done |
 | `explain_isolation_forest.py` | Educational IF walkthrough | Done |
-| `temporal_features.py` | Per-IP beacon features over time windows | **Next** |
-| `contrastive_ae.py` | SimCLR-style AE to fix Fuzzer recall | Planned |
+| `dual_head_detector.py` | Flow-AE + Temporal-AE union head | **Next** |
 | `paper_figures.py` | Final publication figures | Planned |
 
 ---
