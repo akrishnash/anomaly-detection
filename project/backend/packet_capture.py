@@ -2,15 +2,18 @@ import os
 import time
 import threading
 import random
+import math
 from typing import Optional, List
 from collections import deque
+import pandas as pd
+import numpy as np
 
 # Import pipeline pieces
 import flow_generator
 import feature_extractor
 import preprocessing
-import isolation_forest
-import xgboost_classifier
+import anomaly_detector
+import ddos_classifier
 import shap_explainer
 import database
 
@@ -74,8 +77,9 @@ class PacketCaptureManager:
             "detection_rate": 0.0,
             "avg_confidence": 0.0,
             "avg_if_score": 0.0,
-            "avg_xgb_prob": 0.0,
+            "avg_ensemble_score": 0.0,
             "alerts": [],
+            "campaigns": [],
             "charts": {
                 "packet_rate": [],
                 "flow_rate": [],
@@ -400,20 +404,18 @@ class PacketCaptureManager:
         df_flows = feature_extractor.extract_flow_features(grouped_flows)
         
         # 3. Clean & Preprocess
-        X_scaled, feature_names = preprocessing.preprocess_features(df_flows)
+        X_scaled, feature_names, df_canonical = preprocessing.preprocess_dataset(df_flows)
+        df_feats = preprocessing.extract_features(df_canonical)
         
-        # 4. Isolation Forest Score
-        if_scores = isolation_forest.compute_anomaly_scores(X_scaled)
-        
-        # 5. XGBoost Prediction
-        preds, probs, X_aug_scaled = xgboost_classifier.predict_flows(X_scaled, if_scores)
-        
+        # 4. Unsupervised ensemble scoring (Isolation Forest + Autoencoder)
+        probs, if_scores, ae_scores = anomaly_detector.score_flows(X_scaled)
+
         # Analyze predictions
         normal_count = 0
         suspicious_count = 0
         attack_count = 0
-        
-        total_xgb_prob = 0.0
+
+        total_ensemble_score = 0.0
         total_if_score = 0.0
         
         alerts = []
@@ -422,112 +424,124 @@ class PacketCaptureManager:
         top_src_ips = {}
         top_dst_ips = {}
         
+        # Determine anomaly flags for all rows based on user threshold
+        conf_thresh = float(database.get_setting("confidence_threshold", "0.5"))
+        is_anomaly_array = (probs >= conf_thresh)
+        anomaly_indices = np.where(is_anomaly_array)[0]
+        
+        # Compute SHAP in batch for anomalies to save time
+        shap_results = {}
+        if len(anomaly_indices) > 0:
+            batch_shap = shap_explainer.explain_predictions_batch(X_scaled[anomaly_indices])
+            for idx, res in zip(anomaly_indices, batch_shap):
+                shap_results[idx] = res
+
+        db_predictions = []
+        campaign_inputs = []
+
         for i in range(total_flows):
-            pred_class = int(preds[i])
-            prob = float(probs[i])
-            if_score = float(if_scores[i])
-            
-            total_xgb_prob += prob
+            # Sanitize inputs to prevent NaN/Infinity propagating into metrics or JSON
+            raw_prob = float(probs[i])
+            raw_if_score = float(if_scores[i])
+            prob = 0.0 if (math.isnan(raw_prob) or math.isinf(raw_prob)) else raw_prob
+            if_score = 0.0 if (math.isnan(raw_if_score) or math.isinf(raw_if_score)) else raw_if_score
+
+            total_ensemble_score += prob
             total_if_score += if_score
             
-            flow_info = df_flows.iloc[i].to_dict()
-            proto = flow_info["protocol"]
-            src_ip = flow_info["src_ip"]
-            dst_ip = flow_info["dst_ip"]
-            dst_port = int(flow_info["dst_port"])
+            flow_info = df_feats.iloc[i].to_dict()
+            proto = df_canonical.iloc[i]["protocol"]
+            src_ip = df_canonical.iloc[i]["src_ip"]
+            dst_ip = df_canonical.iloc[i]["dst_ip"]
+            dst_port = int(df_canonical.iloc[i]["dst_port"])
             
             protocols_count[proto] = protocols_count.get(proto, 0) + 1
             top_src_ips[src_ip] = top_src_ips.get(src_ip, 0) + 1
             top_dst_ips[dst_ip] = top_dst_ips.get(dst_ip, 0) + 1
             
-            # Map predictions
-            if pred_class == 0:
+            is_anomaly = bool(is_anomaly_array[i])
+            
+            if not is_anomaly:
                 normal_count += 1
                 threat_type = "Normal"
                 severity = "Low"
-                
-                # Construct and append benign flow
-                alert_item = {
-                    "id": i,
-                    "timestamp": datetime_string(curr_time),
-                    "src_ip": src_ip,
-                    "dst_ip": dst_ip,
-                    "protocol": proto,
-                    "dst_port": dst_port,
-                    "prediction": pred_class,
-                    "confidence": round((1 - prob) * 100, 2),
-                    "attack_type": threat_type,
-                    "severity": severity,
-                    "if_score": round(if_score, 4),
-                    "xgb_prob": round(prob, 4),
-                    "shap_explanation": [],
-                    "explanation_text": "Traffic flow matched the benign baseline signature. No threat detected.",
-                    "flow_details": {k: round(v, 4) if isinstance(v, float) else int(v) for k, v in flow_info.items() if k not in ["src_ip", "dst_ip", "protocol"]}
-                }
-                alerts.append(alert_item)
-                
-                # Insert into database history
-                database.add_prediction(
-                    mode="Online",
-                    src_ip=src_ip,
-                    dst_ip=dst_ip,
-                    protocol=proto,
-                    dst_port=dst_port,
-                    prediction=pred_class,
-                    confidence=(1 - prob) * 100,
-                    attack_type=threat_type,
-                    if_score=if_score,
-                    xgb_prob=prob,
-                    shap_explanation=[]
-                )
+                shap_contrib = []
+                explanation_text = "Traffic flow matched the benign baseline signature. No threat detected."
             else:
                 attack_count += 1
-                threat_type, severity = xgboost_classifier.identify_threat_type(flow_info)
-                
-                # Update attack distribution
-                attacks_count[threat_type] = attacks_count.get(threat_type, 0) + 1
-                
-                # Fetch SHAP contributions for explains
-                shap_contrib, explanation_text = shap_explainer.explain_prediction(X_aug_scaled[i])
-                
-                alert_item = {
+                rule_input = dict(flow_info)
+                rule_input["protocol"] = proto
+                rule_input["src_port"] = df_canonical.iloc[i].get("src_port", 0)
+                rule_input["dst_port"] = dst_port
+                threat_verdict = ddos_classifier.classify_flow(rule_input)
+                threat_type = threat_verdict["attack_type"]
+                severity = threat_verdict["severity"]
+                shap_contrib, explanation_text = shap_results.get(i, ([], "Threat signature detected."))
+                if threat_verdict["evidence"]:
+                    explanation_text += " Signature evidence: " + "; ".join(threat_verdict["evidence"]) + "."
+                campaign_inputs.append({
                     "id": i,
-                    "timestamp": datetime_string(curr_time),
                     "src_ip": src_ip,
                     "dst_ip": dst_ip,
-                    "protocol": proto,
                     "dst_port": dst_port,
-                    "prediction": pred_class,
-                    "confidence": round(prob * 100, 2),
                     "attack_type": threat_type,
                     "severity": severity,
-                    "if_score": round(if_score, 4),
-                    "xgb_prob": round(prob, 4),
-                    "shap_explanation": shap_contrib,
-                    "explanation_text": explanation_text,
-                    "flow_details": {k: round(v, 4) if isinstance(v, float) else int(v) for k, v in flow_info.items() if k not in ["src_ip", "dst_ip", "protocol"]}
-                }
-                alerts.append(alert_item)
+                    "total_pkts": flow_info.get("total_pkts", 0)
+                })
                 
-                # Insert into database history
-                database.add_prediction(
-                    mode="Online",
-                    src_ip=src_ip,
-                    dst_ip=dst_ip,
-                    protocol=proto,
-                    dst_port=dst_port,
-                    prediction=pred_class,
-                    confidence=prob * 100,
-                    attack_type=threat_type,
-                    if_score=if_score,
-                    xgb_prob=prob,
-                    shap_explanation=shap_contrib
-                )
+            alert_item = {
+                "id": i,
+                "timestamp": datetime_string(curr_time),
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
+                "protocol": proto,
+                "dst_port": dst_port,
+                "prediction": 1 if is_anomaly else 0,
+                "confidence": round(prob * 100, 2) if is_anomaly else round((1 - prob) * 100, 2),
+                "attack_type": threat_type,
+                "severity": severity,
+                "if_score": round(if_score, 4),
+                "ensemble_score": round(prob, 4),
+                "shap_explanation": shap_contrib,
+                "explanation_text": explanation_text,
+                "flow_details": {k: (0.0 if (pd.isna(v) or np.isinf(v)) else (round(float(v), 4) if isinstance(v, (float, np.floating)) else int(v))) for k, v in flow_info.items() if k not in ["src_ip", "dst_ip", "protocol"]}
+            }
+            alerts.append(alert_item)
+            
+            db_predictions.append({
+                "mode": "Online",
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
+                "protocol": proto,
+                "dst_port": dst_port,
+                "prediction": 1 if is_anomaly else 0,
+                "confidence": prob * 100 if is_anomaly else (1 - prob) * 100,
+                "attack_type": threat_type,
+                "if_score": if_score,
+                "ensemble_score": prob,
+                "shap_explanation": shap_contrib
+            })
+
+        # Aggregate anomalies into campaigns (distributed attacks, port scans)
+        # and apply cross-flow label refinements before persisting/reporting
+        campaigns, refinements = ddos_classifier.aggregate_campaigns(campaign_inputs)
+        for idx, (new_type, new_severity) in refinements.items():
+            alerts[idx]["attack_type"] = new_type
+            alerts[idx]["severity"] = new_severity
+            db_predictions[idx]["attack_type"] = new_type
+
+        # Attack subtype counts for charts (after refinement)
+        for a in alerts:
+            if a["prediction"] == 1:
+                attacks_count[a["attack_type"]] = attacks_count.get(a["attack_type"], 0) + 1
+
+        # Batch insert predictions
+        database.add_predictions_batch(db_predictions)
                 
         # Detection rate is (attack flows / total flows) * 100
         detection_rate = (attack_count / total_flows) * 100 if total_flows > 0 else 0.0
         
-        avg_xgb_prob = total_xgb_prob / total_flows if total_flows > 0 else 0.0
+        avg_ensemble_score = total_ensemble_score / total_flows if total_flows > 0 else 0.0
         avg_if_score = total_if_score / total_flows if total_flows > 0 else 0.0
         
         # Sort alerts by confidence score descending
@@ -544,10 +558,11 @@ class PacketCaptureManager:
             "suspicious_flows": suspicious_count, # placeholder or calculated separately
             "attack_flows": attack_count,
             "detection_rate": round(detection_rate, 2),
-            "avg_confidence": round(avg_xgb_prob * 100, 2),
+            "avg_confidence": round(avg_ensemble_score * 100, 2),
             "avg_if_score": round(avg_if_score, 4),
-            "avg_xgb_prob": round(avg_xgb_prob, 4),
+            "avg_ensemble_score": round(avg_ensemble_score, 4),
             "alerts": alerts,
+            "campaigns": campaigns,
             "charts": {
                 "packet_rate": [{"time": timestamp_label, "packets": total_packets}],
                 "flow_rate": [{"time": timestamp_label, "flows": total_flows}],

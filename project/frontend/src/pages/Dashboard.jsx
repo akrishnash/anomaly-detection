@@ -61,15 +61,15 @@ export default function Dashboard({ stats, timeline, protocols, attacks, topSrcI
         {/* Decorative scanning line */}
         <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-cyber-cyan/20 animate-pulse-glow" />
         
-        {/* XGBoost Probability Gauge */}
+        {/* Ensemble Anomaly Score Gauge */}
         <div className="flex items-center space-x-4 border-b md:border-b-0 md:border-r border-cyber-border/60 pb-4 md:pb-0 md:pr-4">
           <div className="p-3 bg-cyber-cyan/5 rounded-xl border border-cyber-cyan/20">
             <Award className="w-6 h-6 text-cyber-cyan" />
           </div>
           <div className="font-mono text-xs space-y-1">
-            <span className="text-gray-500 font-bold uppercase block">XGBOOST CLASSIFIER PROB</span>
+            <span className="text-gray-500 font-bold uppercase block">ENSEMBLE ANOMALY SCORE</span>
             <div className="flex items-baseline space-x-2">
-              <span className="text-lg font-bold text-white">{(stats.xgb_prob * 100).toFixed(2)}%</span>
+              <span className="text-lg font-bold text-white">{(stats.ensemble_score * 100).toFixed(2)}%</span>
               <span className="text-[10px] text-gray-400">avg threat probability</span>
             </div>
           </div>

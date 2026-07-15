@@ -3,13 +3,14 @@ pandas>=2.0
 numpy>=1.24
 matplotlib>=3.7
 scipy>=1.10
+openpyxl>=3.1.0
+
 
 # --- Network & Packet Analysis ---
 scapy>=2.5
 
-# --- Machine Learning (Unsupervised, Supervised, & Hybrid) ---
+# --- Machine Learning (Unsupervised Ensemble) ---
 scikit-learn>=1.3
-xgboost>=2.0
 
 # --- Model Interpretability & Explainability (Advanced) ---
 shap>=0.42

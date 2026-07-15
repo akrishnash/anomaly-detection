@@ -16,14 +16,22 @@ def group_packets_into_flows(packets):
         ip_layer = pkt["IP"]
         src_ip = ip_layer.src
         dst_ip = ip_layer.dst
-        proto = "TCP" if pkt.haslayer("TCP") else ("UDP" if pkt.haslayer("UDP") else "Other")
-        
+        if pkt.haslayer("TCP"):
+            proto = "TCP"
+        elif pkt.haslayer("UDP"):
+            proto = "UDP"
+        elif pkt.haslayer("ICMP"):
+            proto = "ICMP"
+        else:
+            proto = "Other"
+
         sport = 0
         dport = 0
         syn_val = 0
         rst_val = 0
         fin_val = 0
-        
+        ack_val = 0
+
         if proto == "TCP":
             tcp = pkt["TCP"]
             sport = tcp.sport
@@ -33,6 +41,7 @@ def group_packets_into_flows(packets):
             syn_val = 1 if flags & 0x02 else 0
             rst_val = 1 if flags & 0x04 else 0
             fin_val = 1 if flags & 0x01 else 0
+            ack_val = 1 if flags & 0x10 else 0
         elif proto == "UDP":
             udp = pkt["UDP"]
             sport = udp.sport
@@ -55,7 +64,8 @@ def group_packets_into_flows(packets):
             "direction": direction,
             "syn": syn_val,
             "rst": rst_val,
-            "fin": fin_val
+            "fin": fin_val,
+            "ack": ack_val
         })
         
     return flows

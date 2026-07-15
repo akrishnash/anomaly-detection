@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
-from xgboost import XGBClassifier
 
 # Add parent path to import correctly
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import database
+from preprocessing import AutoencoderAnomalyDetector
 
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
 ATTACK_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "ctu13", "CTU13_Attack_Traffic.csv"))
@@ -90,29 +90,51 @@ def train_and_save_models():
         if_model = IsolationForest(n_estimators=100, contamination=contam, random_state=42, n_jobs=-1)
         if_model.fit(X_scaled)
         
-        # 3. Generate Anomaly Scores
-        if_scores = -if_model.score_samples(X_scaled)
-        
-        # 4. Fit Augmented Scaler (Hybrid representation)
-        X_aug = np.hstack([X_scaled, if_scores.reshape(-1, 1)])
-        aug_scaler = StandardScaler()
-        X_aug_scaled = aug_scaler.fit_transform(X_aug)
-        
-        # 5. Fit XGBClassifier
-        database.add_log("INFO", "Training XGBoost Classifier model...")
-        xgb_model = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42, n_jobs=-1, eval_metric="logloss")
-        xgb_model.fit(X_aug_scaled, y)
-        
-        # 6. Save Pickle Files
+        # 3. Fit Autoencoder on normal samples
+        database.add_log("INFO", "Training Autoencoder model on normal traffic baseline...")
+        X_normal_scaled = X_scaled[y == 0]
+        if len(X_normal_scaled) == 0:
+            X_normal_scaled = X_scaled
+        ae_model = AutoencoderAnomalyDetector(input_dim=10, latent_dim=4, random_state=42)
+        ae_model.fit(X_normal_scaled)
+
+        # 4. Calibrate the unsupervised ensemble score anchors.
+        # Each raw score (IF anomaly score, AE reconstruction error) is mapped to a
+        # [0, 1] pseudo-probability with a piecewise-linear ramp anchored so that
+        # the median normal flow scores ~0.0, the 99th percentile of normal flows
+        # scores 0.5 (default alert threshold => ~1% benign false positives), and
+        # the median attack flow scores 1.0. Labels are used ONLY here at training
+        # time to pick anchors; inference is fully unsupervised.
+        database.add_log("INFO", "Calibrating unsupervised ensemble score anchors...")
+        calibration = {}
+        score_sets = {
+            "if": -if_model.score_samples(X_scaled),
+            "ae": ae_model.reconstruction_error(X_scaled)
+        }
+        for name, scores in score_sets.items():
+            normal_scores = scores[y == 0] if (y == 0).any() else scores
+            attack_scores = scores[y == 1] if (y == 1).any() else scores
+            lo = float(np.quantile(normal_scores, 0.50))
+            mid = float(np.quantile(normal_scores, 0.99))
+            hi = float(np.median(attack_scores))
+            # Guarantee strictly increasing anchors for np.interp
+            if mid <= lo:
+                mid = lo + 1e-6
+            if hi <= mid:
+                hi = mid + (mid - lo) + 1e-6
+            calibration[name] = {"lo": lo, "mid": mid, "hi": hi}
+            database.add_log("INFO", f"Calibrated '{name}' score anchors: lo={lo:.4f}, mid={mid:.4f}, hi={hi:.4f}")
+
+        # 5. Save Pickle Files
         models_data = {
             "scaler.pkl": scaler,
-            "aug_scaler.pkl": aug_scaler,
             "isolation_forest.pkl": if_model,
-            "xgboost.pkl": xgb_model,
+            "autoencoder.pkl": ae_model,
             "meta.pkl": {
                 "medians": medians,
                 "skewed_cols": skewed_cols,
-                "features": FEATURE_NAMES
+                "features": FEATURE_NAMES,
+                "calibration": calibration
             }
         }
         
@@ -121,6 +143,13 @@ def train_and_save_models():
             with open(path, "wb") as f:
                 pickle.dump(obj, f)
             database.add_log("INFO", f"Saved model asset to {path}")
+
+        # Remove deprecated supervised-pipeline assets from previous versions
+        for stale in ["xgboost.pkl", "aug_scaler.pkl"]:
+            stale_path = os.path.join(MODELS_DIR, stale)
+            if os.path.exists(stale_path):
+                os.remove(stale_path)
+                database.add_log("INFO", f"Removed deprecated model asset {stale_path}")
             
         database.add_log("INFO", "Baseline ML models training and persistence completed successfully.")
         return True

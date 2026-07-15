@@ -29,7 +29,7 @@ export default function App() {
     detection_rate: 0.0,
     confidence_score: 0.0,
     if_score: 0.0,
-    xgb_prob: 0.0
+    ensemble_score: 0.0
   });
 
   const [timeline, setTimeline] = useState([]);

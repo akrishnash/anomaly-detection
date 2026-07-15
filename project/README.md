@@ -1,6 +1,6 @@
 # Aegis-IDS: Real-Time Cybersecurity Intrusion Detection System
 
-Aegis-IDS is a professional, modular, production-ready Cybersecurity Intrusion Detection System (IDS) interface and API. It leverages a hybrid machine learning pipeline consisting of unsupervised **Isolation Forest** scoring stacked with supervised **XGBoost** classification, backed by **TreeSHAP** local explainability, and visual dashboards built using React, Tailwind CSS, Recharts, and Framer Motion.
+Aegis-IDS is a professional, modular, production-ready Cybersecurity Intrusion Detection System (IDS) interface and API. It uses a fully **unsupervised two-stage pipeline**: Stage 1 flags anomalous flows with an **Isolation Forest + Autoencoder ensemble** (no labels needed at inference), and Stage 2 classifies flagged flows into **DDoS attack subtypes** (SYN Flood, UDP Flood, ICMP Flood, HTTP Flood, Amplification, Slowloris, Port Scan, ...) with a transparent rule engine plus per-target campaign aggregation. Explainability is provided by **TreeSHAP** over the Isolation Forest, and visual dashboards are built using React, Tailwind CSS, Recharts, and Framer Motion.
 
 ---
 
@@ -12,19 +12,19 @@ project/
 │   ├── packet_capture.py       # Live Sniffer capture manager (options 1-5)
 │   ├── flow_generator.py       # Groups raw scapy packets into bidirectional flows
 │   ├── feature_extractor.py    # Computes 10 CICFlowMeter-like flow features
-│   ├── preprocessing.py        # Cleans, imputes, and scales features
+│   ├── preprocessing.py        # Cleans, imputes, and scales features (+ Autoencoder)
 │   ├── isolation_forest.py     # Generates negated IF anomaly scores
-│   ├── xgboost_classifier.py   # Runs predictions and maps attack categories
+│   ├── anomaly_detector.py     # Stage 1: calibrated IF + Autoencoder ensemble score
+│   ├── ddos_classifier.py      # Stage 2: DDoS subtype rule engine + campaign aggregation + CLI
 │   ├── shap_explainer.py       # Computes TreeSHAP feature contributions
 │   ├── database.py             # SQLite configuration and history persistence
 │   ├── api.py                  # FastAPI route controllers
 │   └── main.py                 # FastAPI app entry point & startup model training
 ├── models/
 │   ├── scaler.pkl              # Base StandardScaler (10 features)
-│   ├── aug_scaler.pkl          # Augmented StandardScaler (11 features)
-│   ├── isolation_forest.pkl    # Trained unsupervised model
-│   ├── xgboost.pkl             # Trained supervised tree classifier
-│   └── meta.pkl                # Metadata (skewed columns, medians)
+│   ├── isolation_forest.pkl    # Trained unsupervised Isolation Forest
+│   ├── autoencoder.pkl         # Autoencoder trained on normal traffic baseline
+│   └── meta.pkl                # Metadata (skewed columns, medians, ensemble calibration)
 ├── frontend/
 │   ├── src/
 │   │   ├── components/         # Navbar, ConsoleLogs, ShapDetails
@@ -63,11 +63,14 @@ Incoming Traffic (NIC / Replay / Stream)
 [Preprocessing] ──► Cleans, imputes medians, log-transforms, and scales
    │
    ▼
-[Isolation Forest] ──► Calculates unsupervised anomaly scores (11th feature)
-   │
+[Stage 1: Unsupervised Ensemble] ──► Isolation Forest + Autoencoder scores fused
+   │                                  into a calibrated anomaly probability [0, 1]
    ▼
-[XGBoost Classifier] ──► Predicts Normal vs Attack, calculates probabilities
-   │
+[Stage 2: DDoS Rule Engine] ──► Classifies anomalies into attack subtypes (SYN/UDP/
+   │                            ICMP/HTTP Flood, Amplification, Slowloris, Scan, ...)
+   ▼
+[Campaign Aggregation] ──► Groups anomalies per target; escalates many-source
+   │                       attacks to "DDoS: <subtype> (distributed)"
    ▼
 [SHAP Explainability] ──► Generates feature contributions & natural language reasonings
    │
@@ -107,6 +110,19 @@ Incoming Traffic (NIC / Replay / Stream)
    npm run dev
    ```
 3. Open your browser and navigate to `http://localhost:3000`. Requests to `/api` are automatically proxied to the FastAPI server at `http://127.0.0.1:8000`.
+
+### 3. Standalone DDoS Classifier CLI
+
+Classify a PCAP or an unlabeled flow CSV directly from the command line (models must be trained first):
+
+```bash
+python project/backend/ddos_classifier.py --input capture.pcap
+python project/backend/ddos_classifier.py --input flows.csv --threshold 0.5 --output report.json
+```
+
+Prints total/anomalous flow counts, an attack-subtype breakdown, and detected campaigns
+(per-target aggregation with distributed-attack escalation); `--output` writes the full
+per-flow JSON report.
 
 ---
 

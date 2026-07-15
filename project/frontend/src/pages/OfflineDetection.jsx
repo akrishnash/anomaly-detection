@@ -31,6 +31,12 @@ export default function OfflineDetection({ addToast }) {
   // Selected Anomaly for SHAP detail
   const [selectedAnomaly, setSelectedAnomaly] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [showType, setShowType] = useState('anomalies');
+
+  const handleShowTypeChange = (type) => {
+    setShowType(type);
+    setExpandedRow(null);
+  };
 
   function handleFileChange(e) {
     const selected = e.target.files[0];
@@ -78,7 +84,7 @@ export default function OfflineDetection({ addToast }) {
       setProgressValue(80);
       await delay(600);
       
-      setProgressStage('Executing XGBoost neural tree classification...');
+      setProgressStage('Scoring flows with unsupervised ensemble and DDoS rule engine...');
       setProgressValue(95);
       
       // Run actual inference request
@@ -327,42 +333,80 @@ export default function OfflineDetection({ addToast }) {
                 </div>
               </div>
 
-              {/* Anomalies detected list */}
+              {/* Anomalies/Benign Traffic Explorer list */}
               <div className="bg-cyber-card border border-cyber-border rounded-2xl p-5 shadow-xl space-y-4">
-                <h3 className="text-sm font-bold font-mono text-white flex items-center space-x-2">
-                  <AlertTriangle className="w-4 h-4 text-cyber-yellow" />
-                  <span>IDENTIFIED CRITICAL ANOMALIES (TOP THREAT SIGNATURES)</span>
-                </h3>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-cyber-border pb-3 space-y-3 md:space-y-0">
+                  <h3 className="text-sm font-bold font-mono text-white flex items-center space-x-2">
+                    <Activity className="w-4 h-4 text-cyber-cyan animate-pulse" />
+                    <span>TRAFFIC FLOW EXPLORER</span>
+                  </h3>
+                  
+                  {/* Tabs Toggle */}
+                  <div className="flex space-x-2 bg-cyber-dark/80 p-1 rounded-lg border border-cyber-border font-mono text-[10px]">
+                    <button
+                      onClick={() => handleShowTypeChange('anomalies')}
+                      className={`px-3 py-1.5 rounded font-bold transition-all duration-200 cursor-pointer ${
+                        showType === 'anomalies'
+                          ? 'bg-cyber-red/20 text-cyber-red border border-cyber-red/30'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      CRITICAL ANOMALIES ({(results?.anomalies || []).length})
+                    </button>
+                    <button
+                      onClick={() => handleShowTypeChange('benign')}
+                      className={`px-3 py-1.5 rounded font-bold transition-all duration-200 cursor-pointer ${
+                        showType === 'benign'
+                          ? 'bg-cyber-green/20 text-cyber-green border border-cyber-green/30'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      BENIGN TRAFFIC ({(results?.benign || []).length})
+                    </button>
+                  </div>
+                </div>
 
-                {results.anomalies.length === 0 ? (
+                {((showType === 'anomalies' ? results?.anomalies : results?.benign) || []).length === 0 ? (
                   <div className="bg-cyber-green/5 border border-cyber-green/20 text-cyber-green p-6 text-center font-mono text-sm rounded-lg flex items-center justify-center space-x-2">
                     <ShieldCheck className="w-5 h-5 text-cyber-green" />
-                    <span>No intrusions or malicious anomalies detected in this traffic slice.</span>
+                    <span>{showType === 'anomalies' ? 'No intrusions or malicious anomalies detected.' : 'No benign flows found in this traffic slice.'}</span>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {results.anomalies.map((item, idx) => {
+                    {((showType === 'anomalies' ? results?.anomalies : results?.benign) || []).map((item, idx) => {
                       const isExpanded = expandedRow === idx;
+                      const isItemAnomaly = item.prediction === 1;
                       return (
                         <div key={idx} className="border border-cyber-border rounded-xl bg-cyber-dark/40 overflow-hidden transition-all duration-300">
                           <div 
                             onClick={() => setExpandedRow(isExpanded ? null : idx)}
-                            className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-800/20 font-mono text-xs select-none"
+                            className="p-4 flex flex-col md:flex-row md:items-center md:justify-between cursor-pointer hover:bg-gray-800/20 font-mono text-xs select-none space-y-2 md:space-y-0"
                           >
-                            <div className="flex items-center space-x-3">
-                              <span className="w-6 h-6 rounded-full bg-cyber-red/10 text-cyber-red border border-cyber-red/20 flex items-center justify-center font-bold">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] border ${
+                                isItemAnomaly 
+                                  ? 'bg-cyber-red/10 text-cyber-red border-cyber-red/20' 
+                                  : 'bg-cyber-green/10 text-cyber-green border-cyber-green/20'
+                              }`}>
                                 {idx + 1}
+                              </span>
+                              <span className="text-cyber-cyan font-semibold bg-cyber-dark/50 px-2 py-0.5 rounded border border-cyber-border/40 text-[10px]">
+                                {fileMeta.extension.startsWith('.pcap') ? 'FLOW' : 'ROW'} #{item.file_row_number}
                               </span>
                               <span className="text-white font-semibold">SRC: {item.src_ip}</span>
                               <span className="text-gray-500">➔</span>
                               <span className="text-white font-semibold">DST: {item.dst_ip}:{item.dst_port}</span>
                             </div>
 
-                            <div className="flex items-center space-x-4">
-                              <span className="bg-cyber-yellow/10 text-cyber-yellow px-2 py-0.5 rounded border border-cyber-yellow/20 font-bold uppercase">
+                            <div className="flex items-center justify-between md:justify-end space-x-4">
+                              <span className={`px-2 py-0.5 rounded border font-bold uppercase text-[10px] ${
+                                isItemAnomaly 
+                                  ? 'bg-cyber-yellow/10 text-cyber-yellow border-cyber-yellow/20' 
+                                  : 'bg-cyber-green/10 text-cyber-green border-cyber-green/20'
+                              }`}>
                                 {item.attack_type}
                               </span>
-                              <span className="text-cyber-red font-bold font-mono">
+                              <span className={`font-bold font-mono ${isItemAnomaly ? 'text-cyber-red' : 'text-cyber-green'}`}>
                                 CONF: {item.confidence}%
                               </span>
                               {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
@@ -370,8 +414,8 @@ export default function OfflineDetection({ addToast }) {
                           </div>
 
                           {isExpanded && (
-                            <div className="p-4 border-t border-cyber-border bg-cyber-card/60 grid grid-cols-1 md:grid-cols-2 gap-6 animate-scanline-pane">
-                              {/* SHAP contributions details component */}
+                            <div className="p-4 border-t border-cyber-border bg-cyber-card/60 grid grid-cols-1 lg:grid-cols-3 gap-6 animate-scanline-pane">
+                              {/* Left column: Explanations */}
                               <div>
                                 <ShapDetails 
                                   explanation={item.shap_explanation} 
@@ -380,16 +424,49 @@ export default function OfflineDetection({ addToast }) {
                                 />
                               </div>
                               
-                              {/* Raw Flow features */}
+                              {/* Middle column: Model Input Features */}
                               <div className="space-y-3 font-mono text-[10px]">
                                 <h5 className="text-[11px] font-bold text-white uppercase border-b border-cyber-border pb-1">EXTRACTED FLOW DETAILS</h5>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-300">
+                                <div className="grid grid-cols-1 gap-y-2 text-gray-300">
                                   {Object.entries(item.flow_details).map(([key, val]) => (
                                     <div key={key} className="flex justify-between py-0.5 border-b border-cyber-border/30">
                                       <span className="text-gray-500 uppercase">{key.replace(/_/g, ' ')}:</span>
                                       <span className="text-white font-semibold">{val}</span>
                                     </div>
                                   ))}
+                                </div>
+                              </div>
+
+                              {/* Right column: Original Raw Record */}
+                              <div className="space-y-3 font-mono text-[10px]">
+                                <h5 className="text-[11px] font-bold text-cyber-cyan uppercase border-b border-cyber-border pb-1 flex items-center space-x-1.5">
+                                  <Tag className="w-3.5 h-3.5 text-cyber-cyan" />
+                                  <span>ORIGINAL RAW RECORD</span>
+                                </h5>
+                                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                                  {item.raw_row && Object.entries(item.raw_row).map(([key, val]) => {
+                                    // Check if key is a label column to highlight it
+                                    const isLabelCol = ['label', 'true_label', 'class'].includes(key.toLowerCase());
+                                    return (
+                                      <div 
+                                        key={key} 
+                                        className={`flex justify-between py-1 px-1.5 border-b border-cyber-border/20 rounded ${
+                                          isLabelCol ? 'bg-cyber-yellow/5 border-l-2 border-l-cyber-yellow' : ''
+                                        }`}
+                                      >
+                                        <span className={`uppercase font-semibold ${isLabelCol ? 'text-cyber-yellow' : 'text-gray-400'}`}>
+                                          {key}:
+                                        </span>
+                                        <span className={`font-semibold break-all text-right max-w-[65%] ${isLabelCol ? 'text-white font-bold' : 'text-gray-200'}`}>
+                                          {val === null || val === undefined ? (
+                                            <span className="text-gray-600 italic">null</span>
+                                          ) : (
+                                            String(val)
+                                          )}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             </div>

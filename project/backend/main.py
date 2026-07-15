@@ -44,10 +44,20 @@ def startup_event():
     
     # 2. Check if baseline ML models are trained
     models_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
-    required_assets = ["scaler.pkl", "aug_scaler.pkl", "isolation_forest.pkl", "xgboost.pkl", "meta.pkl"]
+    required_assets = ["scaler.pkl", "isolation_forest.pkl", "autoencoder.pkl", "meta.pkl"]
     
     missing_assets = [asset for asset in required_assets if not os.path.exists(os.path.join(models_dir, asset))]
-    
+
+    # Older meta.pkl files predate the unsupervised ensemble calibration; force retrain
+    if not missing_assets:
+        try:
+            import pickle
+            with open(os.path.join(models_dir, "meta.pkl"), "rb") as f:
+                if "calibration" not in pickle.load(f):
+                    missing_assets = ["meta.pkl (no ensemble calibration)"]
+        except Exception:
+            missing_assets = ["meta.pkl (unreadable)"]
+
     if missing_assets:
         database.add_log("WARNING", f"Missing trained model files: {missing_assets}. Training models now...")
         success = train_models.train_and_save_models()

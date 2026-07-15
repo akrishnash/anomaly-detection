@@ -1,7 +1,31 @@
 import sqlite3
 import os
 import json
+import math
 from datetime import datetime
+
+def sanitize_float(val, default=0.0):
+    try:
+        fval = float(val)
+        if math.isnan(fval) or math.isinf(fval):
+            return default
+        return fval
+    except (ValueError, TypeError):
+        return default
+
+def sanitize_shap_explanation(shap_explanation):
+    if not isinstance(shap_explanation, list):
+        return shap_explanation
+    cleaned = []
+    for item in shap_explanation:
+        if isinstance(item, dict):
+            c_item = item.copy()
+            impact = item.get("impact", 0.0)
+            c_item["impact"] = sanitize_float(impact)
+            cleaned.append(c_item)
+        else:
+            cleaned.append(item)
+    return cleaned
 
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs", "database.sqlite"))
 
@@ -21,6 +45,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT,
         mode TEXT,
+        file_row_number INTEGER,
         src_ip TEXT,
         dst_ip TEXT,
         protocol TEXT,
@@ -29,10 +54,31 @@ def init_db():
         confidence REAL,
         attack_type TEXT,
         if_score REAL,
-        xgb_prob REAL,
+        ensemble_score REAL,
         shap_explanation TEXT
     )
     """)
+
+    # Check if file_row_number column exists in history table, if not add it (migration for existing db files)
+    try:
+        cursor.execute("SELECT file_row_number FROM history LIMIT 1")
+    except sqlite3.OperationalError:
+        try:
+            cursor.execute("ALTER TABLE history ADD COLUMN file_row_number INTEGER")
+        except Exception:
+            pass
+
+    # Migration: older databases named the model score column 'xgb_prob'
+    try:
+        cursor.execute("SELECT ensemble_score FROM history LIMIT 1")
+    except sqlite3.OperationalError:
+        try:
+            cursor.execute("ALTER TABLE history RENAME COLUMN xgb_prob TO ensemble_score")
+        except Exception:
+            try:
+                cursor.execute("ALTER TABLE history ADD COLUMN ensemble_score REAL")
+            except Exception:
+                pass
     
     # 2. Create settings table
     cursor.execute("""
@@ -111,18 +157,64 @@ def get_setting(key, default=None):
         return row["value"]
     return default
 
-def add_prediction(mode, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, xgb_prob, shap_explanation):
+def add_prediction(mode, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score, shap_explanation, file_row_number=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # shap_explanation is expected to be a list/dict, dump to json string
+    clean_shap = sanitize_shap_explanation(shap_explanation)
+    shap_str = json.dumps(clean_shap) if isinstance(clean_shap, (list, dict)) else str(clean_shap)
+
+    clean_confidence = sanitize_float(confidence)
+    clean_if_score = sanitize_float(if_score)
+    clean_ensemble_score = sanitize_float(ensemble_score)
+
+    cursor.execute("""
+    INSERT INTO history (timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score, shap_explanation)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, int(prediction), clean_confidence, attack_type, clean_if_score, clean_ensemble_score, shap_str))
+    
+    conn.commit()
+    conn.close()
+
+def add_predictions_batch(predictions: list):
+    """
+    Inserts a list of predictions in a single SQLite transaction for massive speedups.
+    Each item in predictions is a dictionary with:
+    'mode', 'src_ip', 'dst_ip', 'protocol', 'dst_port', 'prediction', 'confidence', 'attack_type', 'if_score', 'ensemble_score', 'shap_explanation', 'file_row_number'
+    """
+    if not predictions:
+        return
     conn = get_db_connection()
     cursor = conn.cursor()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # shap_explanation is expected to be a list/dict, dump to json string
-    shap_str = json.dumps(shap_explanation) if isinstance(shap_explanation, (list, dict)) else str(shap_explanation)
-    
-    cursor.execute("""
-    INSERT INTO history (timestamp, mode, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, xgb_prob, shap_explanation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (timestamp, mode, src_ip, dst_ip, protocol, dst_port, int(prediction), float(confidence), attack_type, float(if_score), float(xgb_prob), shap_str))
+    insert_data = []
+    for p in predictions:
+        shap_explanation = p.get("shap_explanation", [])
+        clean_shap = sanitize_shap_explanation(shap_explanation)
+        shap_str = json.dumps(clean_shap) if isinstance(clean_shap, (list, dict)) else str(clean_shap)
+        insert_data.append((
+            timestamp,
+            p["mode"],
+            p.get("file_row_number"),
+            p["src_ip"],
+            p["dst_ip"],
+            p["protocol"],
+            int(p["dst_port"]),
+            int(p["prediction"]),
+            sanitize_float(p["confidence"]),
+            p["attack_type"],
+            sanitize_float(p["if_score"]),
+            sanitize_float(p["ensemble_score"]),
+            shap_str
+        ))
+
+    cursor.executemany("""
+    INSERT INTO history (timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score, shap_explanation)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, insert_data)
     
     conn.commit()
     conn.close()
@@ -152,7 +244,7 @@ def get_history(search=None, mode=None, prediction=None, protocol=None, limit=10
         params.append(protocol)
         
     # Guard against SQL injection in sorting fields since they can't be parameterized directly
-    allowed_sort_cols = ["timestamp", "mode", "src_ip", "dst_ip", "protocol", "dst_port", "prediction", "confidence", "attack_type"]
+    allowed_sort_cols = ["timestamp", "mode", "file_row_number", "src_ip", "dst_ip", "protocol", "dst_port", "prediction", "confidence", "attack_type"]
     if sort_by not in allowed_sort_cols:
         sort_by = "timestamp"
     if sort_order.upper() not in ["ASC", "DESC"]:

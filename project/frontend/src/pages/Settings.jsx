@@ -113,8 +113,7 @@ export default function Settings({ onSettingsChange }) {
               className="w-full bg-cyber-dark border border-cyber-border rounded-lg px-4 py-2.5 text-white font-mono focus:outline-none focus:border-cyber-cyan focus:shadow-glow-cyan transition-all duration-300"
             >
               <option value="Isolation Forest">Isolation Forest (Unsupervised)</option>
-              <option value="XGBoost">XGBoost (Supervised)</option>
-              <option value="Hybrid Model">Hybrid Model (Isolation Forest + XGBoost)</option>
+              <option value="Hybrid Model">Unsupervised Ensemble (Isolation Forest + Autoencoder)</option>
             </select>
             <p className="text-xs text-gray-500 font-mono">Choose the core machine learning inference configuration.</p>
           </div>
