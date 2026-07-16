@@ -68,5 +68,24 @@ def startup_event():
     else:
         database.add_log("INFO", "Trained models detected. Skipping startup training.")
 
+def _pick_free_port(preferred: int, tries: int = 11) -> int:
+    """Returns the first bindable port starting at `preferred` (Windows can hold
+    ports hostage, e.g. a stale VS Code port-forward causes WinError 10013)."""
+    import socket
+    for p in range(preferred, preferred + tries):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
+            return p
+        except OSError:
+            print(f"[!] Port {p} is unavailable (in use or access denied), trying {p + 1}...")
+    raise RuntimeError(f"No free port found in range {preferred}-{preferred + tries - 1}")
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # run_all.py pre-validates a port and shares it with the Vite proxy via env
+    port = int(os.environ.get("AEGIS_BACKEND_PORT", 0) or 0)
+    if not port:
+        port = _pick_free_port(8000)
+    print(f"[*] Backend listening on http://127.0.0.1:{port}")
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

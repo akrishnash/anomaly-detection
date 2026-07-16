@@ -62,8 +62,29 @@ def main():
     else:
         print("[+] Frontend dependencies already installed.")
 
-    # 2. Start Backend FastAPI Server
-    print("[*] Starting FastAPI Backend...")
+    # 2. Pick a free backend port (default 8000; falls forward if another app,
+    # e.g. a stale VS Code port-forward, is holding it) and share it with both
+    # the backend and the Vite dev-server proxy via AEGIS_BACKEND_PORT.
+    import socket
+    backend_port = None
+    preferred = int(os.environ.get("AEGIS_BACKEND_PORT", 8000))
+    for p in range(preferred, preferred + 11):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
+            backend_port = p
+            break
+        except OSError:
+            print(f"[!] Port {p} is busy or blocked (another app may be holding it), trying {p + 1}...")
+    if backend_port is None:
+        print(f"[-] No free backend port found in range {preferred}-{preferred + 10}. Aborting.")
+        sys.exit(1)
+    if backend_port != preferred:
+        print(f"[!] Default port {preferred} unavailable -> backend will run on {backend_port} instead.")
+    child_env = {**os.environ, "AEGIS_BACKEND_PORT": str(backend_port)}
+
+    # 3. Start Backend FastAPI Server
+    print(f"[*] Starting FastAPI Backend on port {backend_port}...")
     # Use sys.executable to ensure we run under the same environment that has dependencies
     backend_proc = subprocess.Popen(
         [sys.executable, "-u", backend_script],
@@ -71,10 +92,11 @@ def main():
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        cwd=root_dir
+        cwd=root_dir,
+        env=child_env
     )
-    
-    # 3. Start Frontend Vite Dev Server
+
+    # 4. Start Frontend Vite Dev Server
     print("[*] Starting React Frontend (Vite)...")
     frontend_proc = subprocess.Popen(
         "npm run dev",
@@ -83,7 +105,8 @@ def main():
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        cwd=frontend_dir
+        cwd=frontend_dir,
+        env=child_env
     )
     
     # Start stdout/stderr forwarding threads
