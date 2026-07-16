@@ -285,14 +285,6 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
 
         benign_indices = np.where(~is_anomaly_array)[0]
 
-        # SHAP for the displayed anomalies plus up to SHAP_MAX_FLOWS for the history DB
-        shap_idx = anomaly_indices[:max(DISPLAY_LIMIT, SHAP_MAX_FLOWS)]
-        shap_results = {}
-        if len(shap_idx) > 0:
-            batch_shap = shap_explainer.explain_predictions_batch(X_scaled[shap_idx])
-            for idx, res in zip(shap_idx, batch_shap):
-                shap_results[int(idx)] = res
-
         # Vectorized canonical lookups (per-row .iloc costs minutes on large files)
         def _canon_col(name, default):
             if name in df_canonical.columns:
@@ -372,6 +364,32 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
         # Attack subtype counts for charts (after refinement)
         for rec in anomaly_records:
             attack_counts[rec["attack_type"]] = attack_counts.get(rec["attack_type"], 0) + 1
+
+        # Stratified display sample: round-robin across attack types (rarest
+        # first) so every detected type reaches the UI, instead of the first
+        # DISPLAY_LIMIT rows which a dominant vector can fully occupy.
+        ids_by_type = {}
+        for rec in anomaly_records:
+            ids_by_type.setdefault(rec["attack_type"], []).append(rec["id"])
+        buckets = sorted(ids_by_type.values(), key=len)
+        display_anomaly_ids = []
+        depth = 0
+        while len(display_anomaly_ids) < DISPLAY_LIMIT and any(depth < len(b) for b in buckets):
+            for b in buckets:
+                if depth < len(b):
+                    display_anomaly_ids.append(b[depth])
+                    if len(display_anomaly_ids) >= DISPLAY_LIMIT:
+                        break
+            depth += 1
+        display_anomaly_ids.sort()
+
+        # SHAP for the displayed anomalies plus up to SHAP_MAX_FLOWS for the history DB
+        shap_idx = list(dict.fromkeys(display_anomaly_ids + [int(i) for i in anomaly_indices[:SHAP_MAX_FLOWS]]))
+        shap_results = {}
+        if len(shap_idx) > 0:
+            batch_shap = shap_explainer.explain_predictions_batch(X_scaled[shap_idx])
+            for idx, res in zip(shap_idx, batch_shap):
+                shap_results[int(idx)] = res
 
         # Batch database insert covering every row (light fields only)
         for i in range(total_flows):
@@ -476,7 +494,7 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
                 "raw_row": raw_row_cleaned
             }
 
-        anomalies_list = [_build_display_item(i) for i in anomaly_indices[:DISPLAY_LIMIT]]
+        anomalies_list = [_build_display_item(i) for i in display_anomaly_ids]
         benign_list = [_build_display_item(i) for i in benign_indices[:DISPLAY_LIMIT]]
 
         # Per-attack-type packet/traffic detail aggregation (after refinement)

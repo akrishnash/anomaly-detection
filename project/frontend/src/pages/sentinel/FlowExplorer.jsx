@@ -236,7 +236,11 @@ export default function FlowExplorer({ lastRun, initialQuery, onNavigate }) {
             </thead>
             <tbody className="font-label-mono text-label-mono divide-y divide-white/[0.03]">
               {flows.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-on-surface-variant/50 italic">No flows match the current filters.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-on-surface-variant/50 italic">
+                  {report.anomalies_count > allFlows.length
+                    ? `No matches among the ${allFlows.length} sampled flows shown here — the other ${(report.anomalies_count - allFlows.length).toLocaleString()} anomalies are not searchable from this view.`
+                    : 'No flows match the current filters.'}
+                </td></tr>
               )}
               {flows.map((f) => {
                 const isOpen = expanded === f.id;
