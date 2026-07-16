@@ -51,6 +51,23 @@ export function attackIcon(name) {
   return 'bug_report';
 }
 
+/** Plain-language explanation of an attack type for non-expert users. */
+export function describeAttack(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('amplification')) return 'Attackers tricked other servers into flooding this network with huge reply messages.';
+  if (n.includes('syn flood')) return 'The target was flooded with fake connection requests that are never completed, tying up its capacity.';
+  if (n.includes('udp flood')) return 'The target was bombarded with a massive stream of junk data packets.';
+  if (n.includes('icmp')) return 'The target was overwhelmed with a flood of ping messages.';
+  if (n.includes('slowloris')) return 'Many web connections were held open at a trickle to slowly exhaust the web server.';
+  if (n.includes('http flood')) return 'The web server was overwhelmed with an abnormally large number of page requests.';
+  if (n.includes('brute force')) return 'Repeated login attempts were made, trying to guess valid credentials.';
+  if (n.includes('exfiltration')) return 'A large amount of data was sent out one-way - possibly stolen information leaving the network.';
+  if (n.includes('volumetric')) return 'A sheer volume of traffic was aimed at overwhelming the network connection.';
+  if (n.includes('port scan') || n.includes('recon')) return 'Someone probed the network looking for open doors (ports) - usually the step before an attack.';
+  if (n.startsWith('ddos')) return 'A coordinated flood of traffic from many sources at once, aimed at taking the target down.';
+  return 'This traffic behaves very differently from normal activity, but does not match a known attack pattern.';
+}
+
 export function formatBytes(bytes) {
   const b = Number(bytes) || 0;
   if (b >= 1e9) return `${(b / 1e9).toFixed(2)} GB`;

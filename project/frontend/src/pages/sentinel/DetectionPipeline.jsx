@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Icon, formatCount } from '../../sentinel/common';
+import { Icon, formatCount, describeAttack, attackIcon } from '../../sentinel/common';
 import { uploadFile, startOffline, getLogs } from '../../services/api';
 
 const STAGES = [
@@ -48,7 +48,7 @@ function StageCard({ stage, state }) {
   );
 }
 
-export default function DetectionPipeline({ addToast, lastRun, onRunComplete, onNavigate, modelHealth }) {
+export default function DetectionPipeline({ addToast, lastRun, onRunComplete, onNavigate, onInspectType, modelHealth }) {
   const [file, setFile] = useState(null);
   const [fileMeta, setFileMeta] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -184,6 +184,67 @@ export default function DetectionPipeline({ addToast, lastRun, onRunComplete, on
           {STAGES.map((s, i) => <StageCard key={s.label} stage={s} state={stageState(i)} />)}
         </div>
       </section>
+
+      {/* Plain-language verdict summary (for non-expert users) */}
+      {report && (
+        <section className={`glass-panel p-6 space-y-5 ${report.anomalies_count > 0 ? 'border-error/30' : 'border-primary-container/30'}`}>
+          <div className="flex items-start gap-4">
+            <Icon
+              name={report.anomalies_count > 0 ? 'gpp_maybe' : 'verified_user'}
+              className={`text-5xl ${report.anomalies_count > 0 ? 'text-error' : 'text-primary-container'}`}
+            />
+            <div>
+              <h3 className={`font-geist text-headline-md ${report.anomalies_count > 0 ? 'text-error' : 'text-primary-container'}`}>
+                {report.anomalies_count > 0 ? 'Attacks detected in this traffic' : 'No attacks detected'}
+              </h3>
+              <p className="text-body-md text-on-surface-variant mt-1 leading-relaxed max-w-3xl">
+                {report.anomalies_count > 0 ? (
+                  <>We analyzed <span className="text-on-surface font-bold">{report.total_flows.toLocaleString()}</span> traffic
+                  flows. <span className="text-error font-bold">{report.anomalies_count.toLocaleString()}</span> of them
+                  ({report.threat_ratio}%) look like attacks and{' '}
+                  <span className="text-primary-container font-bold">{report.normal_count.toLocaleString()}</span> look normal.
+                  Each attack found is explained below - click a card to inspect the affected flows.</>
+                ) : (
+                  <>We analyzed <span className="text-on-surface font-bold">{report.total_flows.toLocaleString()}</span> traffic
+                  flows and all of them look like normal, everyday network activity.</>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {report.attack_details && report.attack_details.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {report.attack_details.map((d) => (
+                <button
+                  key={d.name}
+                  onClick={() => onInspectType && onInspectType(d.name)}
+                  className="text-left glass-panel p-4 space-y-2 border border-white/10 hover:border-error/50 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-on-surface font-bold text-sm">
+                      <Icon name={attackIcon(d.name)} className="text-error text-[18px]" />
+                      {d.name}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-error/15 border border-error/30 text-error font-bold text-xs whitespace-nowrap">
+                      {d.flows.toLocaleString()} {d.flows === 1 ? 'flow' : 'flows'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-on-surface-variant leading-relaxed">{describeAttack(d.name)}</p>
+                  {d.row_numbers && d.row_numbers.length > 0 && (
+                    <div className="pt-1.5 border-t border-white/5">
+                      <span className="text-[10px] text-on-surface-variant/60 uppercase font-label-mono tracking-widest">Found in file rows: </span>
+                      <span className="text-[11px] text-primary-container font-label-mono">
+                        {d.row_numbers.slice(0, 12).join(', ')}
+                        {d.flows > 12 && ` ... and ${(d.flows - 12).toLocaleString()} more`}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Live processing + model assets */}
       <div className="grid grid-cols-12 gap-panel-gap">

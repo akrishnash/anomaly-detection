@@ -96,10 +96,27 @@ def main():
         env=child_env
     )
 
-    # 4. Start Frontend Vite Dev Server
-    print("[*] Starting React Frontend (Vite)...")
+    # 4. Pick a free frontend port too (VS Code port-forwards can squat 5173 as
+    # well) and start the Vite Dev Server pinned to it.
+    frontend_port = None
+    for p in range(5173, 5184):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
+            frontend_port = p
+            break
+        except OSError:
+            print(f"[!] Frontend port {p} is busy or blocked, trying {p + 1}...")
+    if frontend_port is None:
+        print("[-] No free frontend port found in range 5173-5183. Aborting.")
+        kill_process_tree(backend_proc)
+        sys.exit(1)
+    if frontend_port != 5173:
+        print(f"[!] Default port 5173 unavailable -> frontend will run on {frontend_port} instead.")
+
+    print(f"[*] Starting React Frontend (Vite) on port {frontend_port}...")
     frontend_proc = subprocess.Popen(
-        "npm run dev",
+        f"npm run dev -- --port {frontend_port} --strictPort",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -118,8 +135,8 @@ def main():
     
     # Give servers a few seconds to boot, then open browser
     time.sleep(4)
-    print("\n[+] Both servers launched. Opening browser at http://localhost:5173...")
-    webbrowser.open("http://localhost:5173")
+    print(f"\n[+] Both servers launched. Opening browser at http://localhost:{frontend_port}...")
+    webbrowser.open(f"http://localhost:{frontend_port}")
     
     print("\n[*] Orchestrator is running. Press Ctrl+C to stop both servers gracefully.\n")
     

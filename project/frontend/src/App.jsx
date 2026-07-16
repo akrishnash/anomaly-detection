@@ -164,6 +164,7 @@ export default function App() {
             lastRun={lastRun}
             onRunComplete={handleRunComplete}
             onNavigate={setActiveTab}
+            onInspectType={jumpToExplorer}
             modelHealth={modelHealth}
           />
         )}
