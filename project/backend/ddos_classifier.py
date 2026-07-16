@@ -124,6 +124,21 @@ def classify_flow(flow: dict) -> dict:
         severity = "Critical" if bps > 1000000 else "High"
         return verdict(f"Amplification Attack ({amp_service})", severity, 0.85, evidence)
 
+    # ── Amplification fallback (no port info available: oversized one-way UDP) ──
+    # Datasets like the CICDDoS2019 parquet export strip port columns, so the
+    # port-based rule above can never fire. Reflection floods still carry the
+    # size signature (amplified responses >> request size); without a port we
+    # can assert "amplification" but not name the abused service.
+    ports_unknown = src_port == 0 and dst_port == 0
+    if proto == "UDP" and ports_unknown and mean_len > 400 and oneway > 0.8 and (pps > 10 or bps > 100000):
+        evidence = [
+            f"oversized UDP packets (mean {mean_len:.0f} B) in one-way traffic (reflection signature)",
+            f"traffic rate {bps:.0f} B/s",
+            "no port information in input - abused service cannot be identified"
+        ]
+        severity = "Critical" if bps > 1000000 else "High"
+        return verdict("Amplification Attack (unknown service)", severity, 0.7, evidence)
+
     # ── UDP Flood (high-rate, one-directional UDP) ──
     if proto == "UDP" and (pps > 50 or pkts > 100) and oneway > 0.8:
         evidence = [
