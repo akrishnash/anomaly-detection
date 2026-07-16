@@ -1,6 +1,6 @@
 # Project Progress — Network Anomaly Detection
 
-Last updated: 2026-06-24
+Last updated: 2026-07-16 (see "Session Log — 2026-07-16" and "Next Session Starting Point" at the bottom; sections between were written 2026-06-24 and are partially superseded by theory.md / the paper / docs/CICDDOS2019_RESULTS.md)
 
 ---
 
@@ -177,12 +177,105 @@ Recommended: Direction 1 + 2 together (same experimental setup, complete paper).
 
 ---
 
+## Session Log — 2026-07-16 (branch `anurag`)
+
+Full numbers live in **`docs/CICDDOS2019_RESULTS.md`**; this is the conversation-level
+summary so the next session can pick up without re-deriving context.
+
+### What was done (all committed & pushed to `akrishnash/anomaly-detection`, branch `anurag`)
+
+1. **Trained `project/` models on CICDDoS2019** (`5e66191`)
+   - New `project/backend/train_cicddos.py`: trains scaler + IF (full training split)
+     + AE (benign flows only) via the backend's canonical preprocessing, calibrates
+     anchors, evaluates on the held-out `*-testing.parquet` files.
+   - Test split includes 5 attack families never seen in training (zero-day eval).
+   - Stage 1 @0.5: acc 0.881 / prec 0.996 / recall 0.860 / F1 0.923 / FP 1.6%.
+   - Honest framing: macro detection across the 11 families is ~47% (bimodal) —
+     Syn, WebDDoS, UDP-lag, DrDoS_UDP are invisible in the 10-feature space
+     (KS-ceiling, representation limit, not tunable).
+
+2. **Stage 2 rule fixes** (`0f2aa7c`, `451687a`)
+   - Dataset export has NO port/IP columns -> port-based amplification rule could
+     never fire; DrDoS_DNS came out "UDP Flood". Added port-less fallback
+     (`Amplification Attack (unknown service)`), then extended it for slow-per-flow
+     strictly-one-way reflection (TFTP profile: ~4 oversized pkts over ~3 s).
+   - Subtype segregation among detected attacks: 55.0% -> **99.7%**, zero benign
+     flows mislabeled amplification.
+
+3. **`main_dataset.csv` + full-pipeline evaluation** (`451687a`)
+   - `project/backend/eval_main_dataset.py` joins all 10 testing parquets ->
+     `data/CICDDos2019/main_dataset.csv` (306,201 rows, 112 MB, gitignored) and
+     evaluates the production CSV path end-to-end. Reports in
+     `project/models/main_dataset_eval.json` + `cicddos_metrics.json`.
+
+4. **Threshold sweep** (documented in results md): 0.40 -> acc 96.3% / recall 96.1%
+   / FP 2.7%; 0.45 -> 94.2% / 93.5% / 2.1%; 0.50 -> 88.1% / 86.0% / 1.6%.
+   **Recommended operating point 0.40–0.45** (Settings -> confidence threshold; no
+   retrain). Missed families stay missed at any threshold.
+
+5. **UI: plain-language summary for laymen** (`451687a`, `893d8ef`)
+   - Verdict banner + per-attack cards (what the attack means, flow count, affected
+     file row numbers) on the **Detection Pipeline** page; clicking a card jumps to
+     Flow Explorer pre-filtered to that type. Backend returns per-attack
+     `row_numbers` (anomalies payload is capped at 50).
+   - NOTE: `pages/OfflineDetection.jsx` is legacy and NOT mounted in App.jsx — the
+     Sentinel pages (SocDashboard / DetectionPipeline / FlowExplorer /
+     DdosClassifier) are the live UI.
+
+6. **Backend scalability** (`acaa0e9`): offline endpoint no longer runs SHAP on
+   every flagged flow / builds rich payloads for every row. 306k-row CSV:
+   hours -> **~15 s, 0.38 MB payload**. SHAP capped at displayed + 1,000 for
+   history DB. Charts/campaigns/DB still cover all rows.
+
+7. **Startup robustness** (`efbbad7`, `893d8ef`): on this machine VS Code
+   port-forwards squat 8000 AND 5173 (WinError 10013), and a stale Vite survived a
+   failed orchestrator run. `run_all.py` now probes free ports for both servers,
+   shares the backend port with the Vite proxy via `AEGIS_BACKEND_PORT`, pins Vite
+   with `--strictPort`, and opens the browser at the actual port. "Flow Explorer
+   does not open flows" was exactly this: the open page was a dead frontend
+   proxying to VS Code instead of the backend.
+
+8. **Docs**: `docs/CICDDOS2019_RESULTS.md` (`4632aed`) — full report.
+
+### Decisions & judgments made in conversation
+
+- 10 features is the binding constraint; feature work strictly dominates data
+  volume for the missed classes. The principled expansion is **per-view heads**
+  (rate/size, timing/IAT, TCP-state tiers) with union fusion per the miss-product
+  law — NOT naive concatenation (measured to hurt: dimensional dilution).
+- More training data / isolated-Linux testbeds: useful for *evaluation* and
+  attack-side anchors; NOT for benign baselines (quiet testbed "normal" is
+  unrealistically clean) and cannot move a representation ceiling.
+- For deployment, the highest-leverage step is retraining the benign baseline
+  (AE + scaler + anchors) on traffic captured from the target network.
+- Push with `git push akrishnash <branch>` — `origin` (anshv4586) 403s for this
+  git user.
+
+---
+
 ## Next Session Starting Point
 
-Run this to verify env works:
-```
-C:\Users\ADRIN-ISRO\anaconda3\envs\yolov8\python.exe run_ctu13.py
-```
+**Agreed next task: the feature-ceiling experiment** — compute per-class KS
+(ceiling = max achievable Youden J, per Thm 1) for each candidate feature /
+feature-tier on the CICDDoS2019 77-column space vs the current 10-column space.
+This quantifies, before any training, how much recall on Syn / UDP-lag /
+DrDoS_UDP / WebDDoS is recoverable and whether per-view dual heads are justified.
+Strongest candidate features being thrown away today: IAT family (Flow/Fwd/Bwd
+IAT mean/std/max), Init Fwd/Bwd Win Bytes, Packet Length min/max/std/variance,
+Down/Up Ratio, header lengths.
 
-Next task: **Feature selection** — run mutual information between each of 57 features
-and the true label, keep top 15–20, re-run IF. Expected to beat baseline.
+After that (in agreed priority order): per-view heads if the ceilings justify it,
+then deployment hardening (benign baseline retraining on target-network traffic,
+testbed end-to-end pcap evaluation).
+
+Quick env/context checks:
+```
+# project app (base anaconda has fastapi+shap; PATH python IS base anaconda)
+python run_all.py                       # auto-negotiates ports; VS Code squats 8000/5173
+# retrain / re-evaluate
+python project/backend/train_cicddos.py
+python project/backend/eval_main_dataset.py
+```
+Research scripts still use the yolov8 env
+(`C:\Users\ADRIN-ISRO\anaconda3\envs\yolov8\python.exe`); the deployable
+`project/` backend uses base anaconda.
