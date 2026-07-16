@@ -1,0 +1,170 @@
+{
+  "dataset": "CICDDoS2019",
+  "threshold": 0.5,
+  "train_flows": 125170,
+  "train_benign": 46427,
+  "overall": {
+    "accuracy": 0.8806600892877554,
+    "precision": 0.9963341474618747,
+    "recall": 0.8597471712775269,
+    "f1": 0.9230150169382975,
+    "n_flows": 306201,
+    "n_attack": 254797
+  },
+  "per_file": {
+    "DNS": {
+      "accuracy": 0.8273907205728778,
+      "precision": 0.9868217054263566,
+      "recall": 0.693922049604797,
+      "f1": 0.8148503760601696,
+      "n_flows": 6703,
+      "n_attack": 3669
+    },
+    "LDAP": {
+      "accuracy": 0.990815966089721,
+      "precision": 0.9882596685082873,
+      "recall": 0.99375,
+      "f1": 0.9909972299168975,
+      "n_flows": 2831,
+      "n_attack": 1440
+    },
+    "MSSQL": {
+      "accuracy": 0.5380428058889026,
+      "precision": 0.9881796690307328,
+      "recall": 0.40373470701867353,
+      "f1": 0.5732571428571429,
+      "n_flows": 8083,
+      "n_attack": 6212
+    },
+    "NTP": {
+      "accuracy": 0.9207345144571335,
+      "precision": 0.9979218208807521,
+      "recall": 0.9139476633049898,
+      "f1": 0.954090563084082,
+      "n_flows": 134674,
+      "n_attack": 121368
+    },
+    "NetBIOS": {
+      "accuracy": 0.7564044943820225,
+      "precision": 0.8181818181818182,
+      "recall": 0.12040133779264214,
+      "f1": 0.2099125364431487,
+      "n_flows": 2225,
+      "n_attack": 598
+    },
+    "SNMP": {
+      "accuracy": 0.9686411149825784,
+      "precision": 0.9939001143728555,
+      "recall": 0.9595141700404858,
+      "f1": 0.9764044943820225,
+      "n_flows": 4018,
+      "n_attack": 2717
+    },
+    "Syn": {
+      "accuracy": 0.4046306504961411,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_flows": 907,
+      "n_attack": 533
+    },
+    "TFTP": {
+      "accuracy": 0.9913570214966388,
+      "precision": 0.9964389343181219,
+      "recall": 0.9929031410172164,
+      "f1": 0.9946678954644197,
+      "n_flows": 121833,
+      "n_attack": 98917
+    },
+    "UDP": {
+      "accuracy": 0.21248595731022307,
+      "precision": 0.9522388059701492,
+      "recall": 0.06122840690978887,
+      "f1": 0.11505861136158702,
+      "n_flows": 12462,
+      "n_attack": 10420
+    },
+    "UDPLag": {
+      "accuracy": 0.2880064179703169,
+      "precision": 0.625,
+      "recall": 0.013448391796481005,
+      "f1": 0.026330224904004388,
+      "n_flows": 12465,
+      "n_attack": 8923
+    }
+  },
+  "per_label": {
+    "Benign": {
+      "flows": 51404,
+      "detected": 806,
+      "rate": 0.015679713640961792,
+      "kind": "FP-rate"
+    },
+    "DrDoS_DNS": {
+      "flows": 3669,
+      "detected": 2546,
+      "rate": 0.693922049604797,
+      "kind": "recall"
+    },
+    "DrDoS_LDAP": {
+      "flows": 1440,
+      "detected": 1431,
+      "rate": 0.99375,
+      "kind": "recall"
+    },
+    "DrDoS_MSSQL": {
+      "flows": 6212,
+      "detected": 2508,
+      "rate": 0.40373470701867353,
+      "kind": "recall"
+    },
+    "DrDoS_NTP": {
+      "flows": 121368,
+      "detected": 110924,
+      "rate": 0.9139476633049898,
+      "kind": "recall"
+    },
+    "DrDoS_NetBIOS": {
+      "flows": 598,
+      "detected": 72,
+      "rate": 0.12040133779264214,
+      "kind": "recall"
+    },
+    "DrDoS_SNMP": {
+      "flows": 2717,
+      "detected": 2607,
+      "rate": 0.9595141700404858,
+      "kind": "recall"
+    },
+    "DrDoS_UDP": {
+      "flows": 10420,
+      "detected": 638,
+      "rate": 0.06122840690978887,
+      "kind": "recall"
+    },
+    "Syn": {
+      "flows": 533,
+      "detected": 0,
+      "rate": 0.0,
+      "kind": "recall"
+    },
+    "TFTP": {
+      "flows": 98917,
+      "detected": 98215,
+      "rate": 0.9929031410172164,
+      "kind": "recall"
+    },
+    "UDP-lag": {
+      "flows": 8872,
+      "detected": 120,
+      "rate": 0.013525698827772768,
+      "kind": "recall"
+    },
+    "WebDDoS": {
+      "flows": 51,
+      "detected": 0,
+      "rate": 0.0,
+      "kind": "recall"
+    }
+  }
+}
