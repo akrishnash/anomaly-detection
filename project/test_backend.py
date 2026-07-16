@@ -159,8 +159,11 @@ class TestIDSBackend(unittest.TestCase):
         self.assertEqual(c["severity"], "Critical")
         self.assertIn("DDoS", c["label"])
         self.assertIn("SYN Flood", c["label"])
-        # All flows of the dominant type get upgraded to a DDoS verdict
-        self.assertEqual(refinements[0], ("DDoS: SYN Flood", "Critical"))
+        # All flows of the dominant type get upgraded to a DDoS verdict,
+        # with a traceable reason attached
+        self.assertEqual(refinements[0][:2], ("DDoS: SYN Flood", "Critical"))
+        self.assertIn("10.0.0.5", refinements[0][2])
+        self.assertIn("40 unique sources", refinements[0][2])
 
         # One source probing many ports -> port scan, not a DDoS
         scan_flows = []
@@ -173,7 +176,8 @@ class TestIDSBackend(unittest.TestCase):
         campaigns, refinements = ddos_classifier.aggregate_campaigns(scan_flows)
         self.assertEqual(len(campaigns), 1)
         self.assertEqual(campaigns[0]["attack_type"], "Port Scan / Recon")
-        self.assertEqual(refinements[0], ("Port Scan / Recon", "High"))
+        self.assertEqual(refinements[0][:2], ("Port Scan / Recon", "High"))
+        self.assertIn("198.51.100.7", refinements[0][2])
 
     def test_api_endpoints(self):
         # Use TestClient to run endpoints

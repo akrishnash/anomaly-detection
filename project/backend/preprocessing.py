@@ -117,7 +117,7 @@ def build_alias_dictionary() -> dict:
         "protocol": ["protocol", "proto", "prot", "prtcl", "protocol_type"],
         "duration": ["duration", "flow_duration", "flow_duration_s", "flowduration", "td", "duration_s", "flow.duration", "session_duration", "session_dur"],
         "packets": ["packets", "total_packets", "tot_pkts", "total_pkts", "total_fwd_packets", "total_backward_packets", "pkt_count", "total.packets"],
-        "bytes": ["bytes", "total_bytes", "tot_bytes", "fwd_bytes", "bwd_bytes", "totlen_fwd_pkts", "totlen_bwd_pkts", "total_fwd_bytes", "total_backward_bytes", "byt_count", "total.bytes", "network_packet_size", "packet_size"],
+        "bytes": ["bytes", "total_bytes", "tot_bytes", "fwd_bytes", "bwd_bytes", "totlen_fwd_pkts", "totlen_bwd_pkts", "total_fwd_bytes", "total_backward_bytes", "byt_count", "total.bytes", "network_packet_size", "packet_size", "fwd_packets_length_total", "total_length_of_fwd_packets"],
         "packet_rate": ["packet_rate", "flow_pkts_s", "flow_packets_s", "packets_per_second", "packetrate", "flow_packets_per_second", "pkt_rate", "packet.rate"],
         "byte_rate": ["byte_rate", "flow_byts_s", "flow_bytes_s", "bytes_per_second", "byterate", "flow_bytes_per_second", "byt_rate", "byte.rate"],
         "avg_packet_size": ["avg_packet_size", "pkt_len_mean", "average_packet_size", "mean_packet_length", "avg_pkt_len", "avg_pkt_size", "pkt_size_avg", "packet_size_mean", "average.packet.size"],
@@ -129,8 +129,12 @@ def build_alias_dictionary() -> dict:
         "timestamp": ["timestamp", "time", "ts", "epoch", "tstamp"],
         
         # Extra helper keys to keep fwd and bwd bytes in the canonical schema for feature extraction
-        "fwd_bytes": ["fwd_bytes", "totlen_fwd_pkts", "total_fwd_pkts", "total_fwd_bytes"],
-        "bwd_bytes": ["bwd_bytes", "totlen_bwd_pkts", "total_bwd_pkts", "total_backward_bytes"],
+        # (includes CICDDoS2019 parquet spellings: "Fwd/Bwd Packets Length Total",
+        #  "Total Length of Fwd/Bwd Packets", "Subflow Fwd/Bwd Bytes")
+        "fwd_bytes": ["fwd_bytes", "totlen_fwd_pkts", "total_fwd_pkts", "total_fwd_bytes",
+                      "fwd_packets_length_total", "total_length_of_fwd_packets", "subflow_fwd_bytes"],
+        "bwd_bytes": ["bwd_bytes", "totlen_bwd_pkts", "total_bwd_pkts", "total_backward_bytes",
+                      "bwd_packets_length_total", "total_length_of_bwd_packets", "subflow_bwd_bytes"],
         "fwd_packets": ["fwd_packets", "tot_fwd_pkts", "total_fwd_packets", "fwd_pkts"],
         "bwd_packets": ["bwd_packets", "tot_bwd_pkts", "total_backward_packets", "bwd_pkts"]
     }

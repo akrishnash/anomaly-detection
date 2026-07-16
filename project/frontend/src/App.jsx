@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
-import OfflineDetection from './pages/OfflineDetection';
 import OnlineDetection from './pages/OnlineDetection';
 import History from './pages/History';
 import Settings from './pages/Settings';
-import { getOnlineStatus, getDashboardData, getLatestPrediction } from './services/api';
-import { X, ShieldAlert, CheckCircle, Info } from 'lucide-react';
+import SentinelLayout from './sentinel/SentinelLayout';
+import SocDashboard from './pages/sentinel/SocDashboard';
+import DetectionPipeline from './pages/sentinel/DetectionPipeline';
+import FlowExplorer from './pages/sentinel/FlowExplorer';
+import DdosClassifier from './pages/sentinel/DdosClassifier';
+import { getOnlineStatus, getDashboardData, getLatestPrediction, getLastRun, getModelHealth } from './services/api';
+import { X, ShieldAlert, CheckCircle } from 'lucide-react';
+import './sentinel/sentinel.css';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('soc');
   const [toasts, setToasts] = useState([]);
+
+  // Last completed offline analysis (shared by all Sentinel screens)
+  const [lastRun, setLastRun] = useState(null);
+  const [lastRunTime, setLastRunTime] = useState(null);
+  const [modelHealth, setModelHealth] = useState(null);
+  const [explorerQuery, setExplorerQuery] = useState('');
   
   // Shared System State
   const [systemStatus, setSystemStatus] = useState({
@@ -85,7 +95,27 @@ export default function App() {
   useEffect(() => {
     fetchStatus();
     fetchDashboard();
+    getModelHealth().then(setModelHealth).catch(() => {});
+    getLastRun()
+      .then((data) => {
+        if (data.available) {
+          setLastRun(data.report);
+          setLastRunTime(data.timestamp);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  function handleRunComplete(report) {
+    setLastRun(report);
+    setLastRunTime(new Date().toLocaleString());
+    getModelHealth().then(setModelHealth).catch(() => {});
+  }
+
+  function jumpToExplorer(query) {
+    setExplorerQuery(query || '');
+    setActiveTab('explorer');
+  }
 
   // Polling logic when sniffer is running
   useEffect(() => {
@@ -112,22 +142,53 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-cyber-dark cyber-grid relative">
-      {/* Background neon visual line */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyber-cyan/40 to-transparent animate-pulse-glow" />
+    <SentinelLayout
+      active={activeTab}
+      onNavigate={setActiveTab}
+      modelHealth={modelHealth}
+      onSearch={jumpToExplorer}
+    >
+      <div className="transition-all duration-300">
+        {activeTab === 'soc' && (
+          <SocDashboard
+            lastRun={lastRun}
+            lastRunTime={lastRunTime}
+            modelHealth={modelHealth}
+            onNavigate={setActiveTab}
+          />
+        )}
 
-      {/* Main Navigation Header */}
-      <Navbar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        systemStatus={systemStatus} 
-      />
+        {activeTab === 'pipeline' && (
+          <DetectionPipeline
+            addToast={addToast}
+            lastRun={lastRun}
+            onRunComplete={handleRunComplete}
+            onNavigate={setActiveTab}
+            modelHealth={modelHealth}
+          />
+        )}
 
-      {/* Main Panel Content Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8">
-        <div className="transition-all duration-300">
-          {activeTab === 'dashboard' && (
-            <Dashboard 
+        {activeTab === 'explorer' && (
+          <FlowExplorer
+            key={explorerQuery}
+            lastRun={lastRun}
+            initialQuery={explorerQuery}
+            onNavigate={setActiveTab}
+          />
+        )}
+
+        {activeTab === 'classifier' && (
+          <DdosClassifier
+            lastRun={lastRun}
+            onNavigate={setActiveTab}
+            onInspectType={jumpToExplorer}
+          />
+        )}
+
+        {/* Legacy pages, rendered inside the Sentinel shell */}
+        {activeTab === 'dashboard' && (
+          <div className="max-w-7xl mx-auto">
+            <Dashboard
               stats={dashboardStats}
               timeline={timeline}
               protocols={protocols}
@@ -135,14 +196,12 @@ export default function App() {
               topSrcIps={topSrcIps}
               topDstIps={topDstIps}
             />
-          )}
+          </div>
+        )}
 
-          {activeTab === 'offline' && (
-            <OfflineDetection addToast={addToast} />
-          )}
-
-          {activeTab === 'online' && (
-            <OnlineDetection 
+        {activeTab === 'online' && (
+          <div className="max-w-7xl mx-auto">
+            <OnlineDetection
               addToast={addToast}
               systemStatus={systemStatus}
               setSystemStatus={setSystemStatus}
@@ -150,17 +209,21 @@ export default function App() {
               latestAlerts={latestAlerts}
               fetchDashboard={fetchDashboard}
             />
-          )}
+          </div>
+        )}
 
-          {activeTab === 'history' && (
+        {activeTab === 'history' && (
+          <div className="max-w-7xl mx-auto">
             <History />
-          )}
+          </div>
+        )}
 
-          {activeTab === 'settings' && (
+        {activeTab === 'settings' && (
+          <div className="max-w-7xl mx-auto">
             <Settings onSettingsChange={handleSettingsChange} />
-          )}
-        </div>
-      </main>
+          </div>
+        )}
+      </div>
 
       {/* Toast Notification Container */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col space-y-2.5 max-w-sm w-full font-mono text-xs">
@@ -189,6 +252,6 @@ export default function App() {
           );
         })}
       </div>
-    </div>
+    </SentinelLayout>
   );
 }

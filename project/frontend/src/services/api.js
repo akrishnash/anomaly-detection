@@ -126,6 +126,12 @@ export async function getLatestPrediction() {
   return res.json();
 }
 
+export async function getLastRun() {
+  const res = await fetch(`${API_BASE}/api/last-run`);
+  if (!res.ok) throw new Error('Failed to fetch last run');
+  return res.json();
+}
+
 export async function getInterfaces() {
   const res = await fetch(`${API_BASE}/api/interfaces`);
   if (!res.ok) throw new Error('Failed to fetch network interfaces');

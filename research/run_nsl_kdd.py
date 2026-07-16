@@ -39,7 +39,8 @@ BASE_DIR    = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA_DIR    = os.path.join(BASE_DIR, "data", "nsl_kdd")
 TRAIN_PATH  = os.path.join(DATA_DIR, "KDDTrain+.txt")
 TEST_PATH   = os.path.join(DATA_DIR, "KDDTest+.txt")
-OUT_CSV     = os.path.join(BASE_DIR, "results", "nsl_kdd_evaluation_metrics.csv")
+OUT_CSV     = os.path.join(BASE_DIR, "research", "results", "nsl_kdd_evaluation_metrics.csv")
+os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
 OUT_PNG     = os.path.join(BASE_DIR, "docs", "graphs", "nsl_kdd_comparison.png")
 
 TRAIN_URL   = "https://raw.githubusercontent.com/jmnwong/NSL-KDD-Dataset/master/KDDTrain%2B.txt"

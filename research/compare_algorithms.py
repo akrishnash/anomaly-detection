@@ -41,7 +41,8 @@ ATTACK_CSV = os.path.join(BASE_DIR, "data", "ctu13", "CTU13_Attack_Traffic.csv")
 NORMAL_CSV = os.path.join(BASE_DIR, "data", "ctu13", "CTU13_Normal_Traffic.csv")
 N_SAMPLE    = 10000         # Sample size per class (20,000 flows total)
 TEST_SIZE   = 0.20          # 80/20 train/test split
-OUT_CSV     = os.path.join(BASE_DIR, "results", "evaluation_metrics.csv")
+OUT_CSV     = os.path.join(BASE_DIR, "research", "results", "evaluation_metrics.csv")
+os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
 OUT_PNG     = os.path.join(BASE_DIR, "docs", "graphs", "model_comparison.png")
 
 FEATURE_COLS = [

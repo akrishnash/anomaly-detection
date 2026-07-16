@@ -58,6 +58,11 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 # Global packet capture manager instance
 capture_manager = PacketCaptureManager()
 
+# Last completed offline analysis, kept in memory so every dashboard screen
+# (SOC home, flow explorer, DDoS classifier) can render real data after a
+# page refresh without re-running the pipeline.
+LAST_RUN = {"available": False, "timestamp": None, "report": None}
+
 class SettingsUpdate(BaseModel):
     context_window: str
     model_selection: str
@@ -138,8 +143,8 @@ async def upload_file(file: UploadFile = File(...)):
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(filename)[1].lower()
     
-    if ext not in [".csv", ".xlsx", ".xls", ".pcap", ".pcapng"]:
-        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload CSV, Excel, PCAP, or PCAPNG.")
+    if ext not in [".csv", ".xlsx", ".xls", ".parquet", ".pcap", ".pcapng"]:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload CSV, Excel, Parquet, PCAP, or PCAPNG.")
         
     temp_path = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
     
@@ -166,6 +171,21 @@ async def upload_file(file: UploadFile = File(...)):
             num_rows = len(df_full)
             num_cols = len(df.columns)
             preview_data = df.fillna("").to_dict(orient="records")
+        elif ext == ".parquet":
+            try:
+                # Cheap metadata read: row count without loading the whole file
+                import pyarrow.parquet as pq
+                pf = pq.ParquetFile(temp_path)
+                num_rows = pf.metadata.num_rows
+                num_cols = pf.metadata.num_columns
+                df = next(pf.iter_batches(batch_size=10)).to_pandas()
+            except ImportError:
+                df_full = pd.read_parquet(temp_path)
+                num_rows = len(df_full)
+                num_cols = len(df_full.columns)
+                df = df_full.head(10)
+            # to_json handles timestamps/NaN that plain dict conversion would not
+            preview_data = json.loads(df.to_json(orient="records", date_format="iso"))
         elif ext in [".pcap", ".pcapng"]:
             from scapy.all import rdpcap
             pkts = rdpcap(temp_path)
@@ -204,6 +224,8 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
             df_full = pd.read_csv(temp_path)
         elif extension in [".xlsx", ".xls"]:
             df_full = pd.read_excel(temp_path)
+        elif extension == ".parquet":
+            df_full = pd.read_parquet(temp_path)
         elif extension in [".pcap", ".pcapng"]:
             from scapy.all import rdpcap
             import flow_generator
@@ -221,13 +243,22 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
         df_feats = preprocessing.extract_features(df_canonical)
         
         # Ground truth check
-        label_col = next((c for c in df_full.columns if c.lower() in ["label", "true_label", "class"]), None)
+        label_col = next((c for c in df_full.columns if str(c).strip().lower() in ["label", "true_label", "class"]), None)
         y_true = None
         if label_col:
-            y_true = df_full[label_col].apply(lambda x: 1 if str(x).strip().lower() in ["1", "attack", "anomaly", "malicious"] else 0).values
+            # Anything that is not an explicit benign marker counts as attack, so
+            # named subtypes ("Syn", "DrDoS_DNS", ...) from CICDDoS2019 work too.
+            y_true = df_full[label_col].apply(
+                lambda x: 0 if str(x).strip().lower() in ["0", "benign", "normal", "background"] else 1
+            ).values
             
         # 3. Running prediction pipeline (unsupervised IF + Autoencoder ensemble)
-        probs, if_scores, ae_scores = anomaly_detector.score_flows(X_scaled)
+        score_detail = anomaly_detector.score_flows_detailed(X_scaled)
+        probs = score_detail["probs"]
+        if_scores = score_detail["if_scores"]
+        ae_scores = score_detail["ae_scores"]
+        if_probs = score_detail["if_probs"]
+        ae_probs = score_detail["ae_probs"]
 
         # 4. Aggregating results
         total_flows = len(probs)
@@ -267,6 +298,8 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
             prob = float(probs[i])
             if_score = float(if_scores[i])
             ae_score = float(ae_scores[i])
+            if_prob = float(if_probs[i])
+            ae_prob = float(ae_probs[i])
             
             # Map predictions to threat category and severity
             flow_info = df_feats.iloc[i].to_dict()
@@ -282,6 +315,23 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
 
             is_anomaly = bool(is_anomaly_array[i])
 
+            # Stage 1 traceability: record which unsupervised head(s) crossed the threshold
+            fired_heads = []
+            if if_prob >= conf_thresh:
+                fired_heads.append("Isolation Forest")
+            if ae_prob >= conf_thresh:
+                fired_heads.append("Autoencoder")
+            stage1_trace = {
+                "if_raw": round(if_score, 4),
+                "if_prob": round(if_prob, 4),
+                "ae_raw": round(ae_score, 4),
+                "ae_prob": round(ae_prob, 4),
+                "ensemble_score": round(prob, 4),
+                "threshold": conf_thresh,
+                "triggered_by": " + ".join(fired_heads) if fired_heads else "none",
+                "decision": "ANOMALY" if is_anomaly else "NORMAL"
+            }
+
             # Stage 2: classify attack subtype for anomalous flows (single rule-engine call)
             if is_anomaly:
                 rule_input = dict(flow_info)
@@ -291,14 +341,24 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
                 threat_verdict = ddos_classifier.classify_flow(rule_input)
                 attack_type = threat_verdict["attack_type"]
                 severity = threat_verdict["severity"]
+                evidence = threat_verdict["evidence"]
+                rule_confidence = threat_verdict["confidence"]
                 shap_contrib, explanation_text = shap_results.get(i, ([], "Threat signature detected."))
                 if threat_verdict["evidence"]:
                     explanation_text += " Signature evidence: " + "; ".join(threat_verdict["evidence"]) + "."
+                stage2_trace = {
+                    "attack_type": attack_type,
+                    "rule_confidence": rule_confidence,
+                    "evidence": evidence
+                }
             else:
                 attack_type = "Normal"
                 severity = "Low"
+                evidence = []
+                rule_confidence = 0.0
                 shap_contrib = []
                 explanation_text = "Traffic flow matched the benign baseline signature. No threat detected."
+                stage2_trace = None
             
             # Calculate the row/flow number in the original file
             if extension in [".csv", ".xlsx", ".xls"]:
@@ -333,6 +393,13 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
                 "if_score": round(if_score, 4),
                 "ensemble_score": round(prob, 4),
                 "ae_score": round(ae_score, 4), # Autoencoder reconstruction error
+                "evidence": evidence,
+                "rule_confidence": rule_confidence,
+                "classification_trace": {
+                    "stage1_anomaly_detection": stage1_trace,
+                    "stage2_rule_engine": stage2_trace,
+                    "stage3_campaign_refinement": None  # filled after aggregate_campaigns
+                },
                 "shap_explanation": shap_contrib if is_anomaly else [],
                 "explanation_text": explanation_text,
                 "flow_details": {k: (0.0 if (pd.isna(v) or np.isinf(v)) else (round(float(v), 4) if isinstance(v, (float, np.floating)) else int(v))) for k, v in flow_info.items()},
@@ -384,12 +451,97 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
         campaigns, refinements = ddos_classifier.aggregate_campaigns(campaign_inputs)
         for item in anomalies_list:
             if item["id"] in refinements:
-                item["attack_type"], item["severity"] = refinements[item["id"]]
+                new_type, new_severity, reason = refinements[item["id"]]
+                item["classification_trace"]["stage3_campaign_refinement"] = {
+                    "original_type": item["attack_type"],
+                    "refined_type": new_type,
+                    "reason": reason
+                }
+                item["attack_type"], item["severity"] = new_type, new_severity
                 db_predictions[item["id"]]["attack_type"] = item["attack_type"]
 
         # Attack subtype counts for charts (after refinement)
         for item in anomalies_list:
             attack_counts[item["attack_type"]] = attack_counts.get(item["attack_type"], 0) + 1
+
+        # Per-attack-type packet/traffic detail aggregation (after refinement)
+        severity_counts = {}
+        attack_detail_map = {}
+        for item in anomalies_list:
+            severity_counts[item["severity"]] = severity_counts.get(item["severity"], 0) + 1
+            fd = item["flow_details"]
+            d = attack_detail_map.setdefault(item["attack_type"], {
+                "name": item["attack_type"],
+                "flows": 0,
+                "total_pkts": 0,
+                "total_bytes": 0.0,
+                "syn_pkts": 0,
+                "peak_pps": 0.0,
+                "sum_pps": 0.0,
+                "sum_conf": 0.0,
+                "severities": {},
+                "src_counter": {},
+                "target_counter": {},
+                "dst_ports": set(),
+                "protocols": set(),
+                "example_evidence": []
+            })
+            d["flows"] += 1
+            d["total_pkts"] += int(fd.get("total_pkts", 0))
+            d["total_bytes"] += float(fd.get("fwd_bytes", 0.0)) + float(fd.get("bwd_bytes", 0.0))
+            d["syn_pkts"] += int(fd.get("syn_flag", 0))
+            pps = float(fd.get("flow_pkts_s", 0.0))
+            d["peak_pps"] = max(d["peak_pps"], pps)
+            d["sum_pps"] += pps
+            d["sum_conf"] += float(item.get("rule_confidence", 0.0))
+            d["severities"][item["severity"]] = d["severities"].get(item["severity"], 0) + 1
+            d["src_counter"][item["src_ip"]] = d["src_counter"].get(item["src_ip"], 0) + 1
+            target = f"{item['dst_ip']}:{item['dst_port']}"
+            d["target_counter"][target] = d["target_counter"].get(target, 0) + 1
+            d["dst_ports"].add(int(item["dst_port"]))
+            d["protocols"].add(item["protocol"])
+            if item["evidence"] and len(d["example_evidence"]) < 3:
+                ev = item["evidence"][0]
+                if ev not in d["example_evidence"]:
+                    d["example_evidence"].append(ev)
+
+        attack_details = []
+        for d in sorted(attack_detail_map.values(), key=lambda x: -x["flows"]):
+            attack_details.append({
+                "name": d["name"],
+                "flows": d["flows"],
+                "total_pkts": d["total_pkts"],
+                "total_bytes": round(d["total_bytes"], 0),
+                "syn_pkts": d["syn_pkts"],
+                "avg_pps": round(d["sum_pps"] / d["flows"], 2) if d["flows"] else 0.0,
+                "peak_pps": round(d["peak_pps"], 2),
+                "avg_rule_confidence": round(d["sum_conf"] / d["flows"], 2) if d["flows"] else 0.0,
+                "severities": d["severities"],
+                "protocols": sorted(d["protocols"]),
+                "top_sources": [{"ip": ip, "flows": c} for ip, c in
+                                sorted(d["src_counter"].items(), key=lambda x: -x[1])[:5]],
+                "top_targets": [{"target": t, "flows": c} for t, c in
+                                sorted(d["target_counter"].items(), key=lambda x: -x[1])[:5]],
+                "unique_sources": len(d["src_counter"]),
+                "dst_ports": sorted(d["dst_ports"])[:20],
+                "example_evidence": d["example_evidence"]
+            })
+
+        severities = [
+            {"name": s, "value": severity_counts[s]}
+            for s in ["Critical", "High", "Medium", "Low"] if s in severity_counts
+        ]
+
+        # Ensemble score distribution histogram (10 bins), split normal vs attack
+        score_distribution = []
+        for b in range(10):
+            lo_edge, hi_edge = b / 10.0, (b + 1) / 10.0
+            in_bin = (probs >= lo_edge) & (probs < hi_edge) if b < 9 else (probs >= lo_edge) & (probs <= 1.0)
+            score_distribution.append({
+                "bin": f"{lo_edge:.1f}-{hi_edge:.1f}",
+                "normal": int(np.sum(in_bin & ~is_anomaly_array)),
+                "attack": int(np.sum(in_bin & is_anomaly_array))
+            })
 
         # Perform a single batch database transaction for all predictions (extremely fast)
         database.add_predictions_batch(db_predictions)
@@ -440,8 +592,8 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
             os.remove(temp_path)
             
         database.add_log("INFO", f"Offline detection finished: {total_flows} flows analyzed. Detected {anomaly_count} attacks.")
-        
-        return JSONResponse(content={
+
+        report = {
             "status": "success",
             "total_flows": total_flows,
             "anomalies_count": anomaly_count,
@@ -452,9 +604,18 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
             "benign": benign_list[:50],         # Return top 50 benign to prevent payload bloat
             "protocols": [{"name": k, "value": v} for k, v in protocol_counts.items()],
             "attacks": [{"name": k, "value": v} for k, v in attack_counts.items()],
+            "severities": severities,
+            "score_distribution": score_distribution,
+            "attack_details": attack_details,
             "campaigns": campaigns,
             "timeline": timeline_data
-        })
+        }
+
+        LAST_RUN["available"] = True
+        LAST_RUN["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        LAST_RUN["report"] = report
+
+        return JSONResponse(content=report)
     except ValueError as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -467,6 +628,15 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+
+@router.get("/last-run")
+def get_last_run():
+    """Returns the most recent completed offline analysis (kept in memory)."""
+    return JSONResponse(content={
+        "available": LAST_RUN["available"],
+        "timestamp": LAST_RUN["timestamp"],
+        "report": LAST_RUN["report"]
+    })
 
 # ── Online Detection Endpoints ────────────────────────────────────────────────
 

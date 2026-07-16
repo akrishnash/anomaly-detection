@@ -525,9 +525,10 @@ class PacketCaptureManager:
         # Aggregate anomalies into campaigns (distributed attacks, port scans)
         # and apply cross-flow label refinements before persisting/reporting
         campaigns, refinements = ddos_classifier.aggregate_campaigns(campaign_inputs)
-        for idx, (new_type, new_severity) in refinements.items():
+        for idx, (new_type, new_severity, reason) in refinements.items():
             alerts[idx]["attack_type"] = new_type
             alerts[idx]["severity"] = new_severity
+            alerts[idx]["refinement_reason"] = reason
             db_predictions[idx]["attack_type"] = new_type
 
         # Attack subtype counts for charts (after refinement)

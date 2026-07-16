@@ -168,6 +168,7 @@ export default function History() {
                   { field: 'id', label: 'ID' },
                   { field: 'timestamp', label: 'TIMESTAMP' },
                   { field: 'mode', label: 'MODE' },
+                  { field: 'file_row_number', label: 'FILE ROW / FLOW' },
                   { field: 'src_ip', label: 'SOURCE IP' },
                   { field: 'dst_ip', label: 'DESTINATION IP' },
                   { field: 'protocol', label: 'PROTO' },
@@ -225,6 +226,9 @@ export default function History() {
                         }`}>
                           {record.mode}
                         </span>
+                      </td>
+                      <td className="p-4 text-center text-cyber-cyan font-semibold">
+                        {record.file_row_number ? `#${record.file_row_number}` : '—'}
                       </td>
                       <td className="p-4 text-center font-bold text-gray-200">{record.src_ip}</td>
                       <td className="p-4 text-center font-bold text-gray-200">{record.dst_ip}</td>
@@ -327,7 +331,7 @@ export default function History() {
               shapData && (
                 <div className="space-y-6">
                   {/* Flow Stats Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-cyber-dark/40 border border-cyber-border p-4 rounded-xl text-center">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-cyber-dark/40 border border-cyber-border p-4 rounded-xl text-center">
                     <div>
                       <div className="text-[10px] text-gray-500">SOURCE IP</div>
                       <div className="text-sm font-bold text-white">{selectedRecord.src_ip}</div>
@@ -343,6 +347,10 @@ export default function History() {
                     <div>
                       <div className="text-[10px] text-gray-500">ISOLATION FOREST SCORE</div>
                       <div className="text-sm font-bold text-cyber-yellow">{selectedRecord.if_score}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-500">FILE ROW / FLOW</div>
+                      <div className="text-sm font-bold text-cyber-cyan">{selectedRecord.file_row_number ? `#${selectedRecord.file_row_number}` : '—'}</div>
                     </div>
                   </div>
 

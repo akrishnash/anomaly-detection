@@ -45,7 +45,10 @@ python research/explain_isolation_forest.py
 
 # SecureAI Agent — GPT-4o tool-calling loop over the detector (requires OpenAI key)
 export OPENAI_API_KEY=sk-...
-python agent/agent.py
+python research/agent/agent.py
+
+# Full IDS web app (FastAPI backend + React frontend)
+python run_all.py
 ```
 
 All graphs are saved to the `docs/graphs/` folder.
@@ -107,10 +110,12 @@ very quickly, earning a low (anomalous) score.
 ```
 anamoly_detection/
 ├── project/              # Aegis-IDS production FastAPI backend + React frontend
-├── data/                 # Consolidated datasets
-│   ├── ctu13/            # CTU-13 CSV flow datasets and logs
-│   └── nsl_kdd/          # NSL-KDD Train and Test text datasets
+│   ├── backend/          # Two-stage unsupervised detector + DDoS rule engine
+│   ├── frontend/         # React dashboard (Vite)
+│   └── models/           # Trained model assets (scaler, IF, autoencoder, meta)
 ├── research/             # Experimental, benchmarking, and explanation scripts
+│   ├── agent/            # SecureAI GPT-4o advisor agent (agent.py, cve_db.py)
+│   ├── results/          # Generated metrics CSVs (gitignored, re-created by scripts)
 │   ├── compare_algorithms.py
 │   ├── compare_datasets.py
 │   ├── explain_isolation_forest.py
@@ -118,14 +123,10 @@ anamoly_detection/
 │   ├── run_ctu13_v2.py
 │   ├── run_rigorous_hybrid.py
 │   └── run_nsl_kdd.py
-├── agent/                # SecureAI GPT-4o advisor agent
-│   ├── agent.py
-│   ├── cve_db.py
-│   └── anomaly_detector_v2.py
-├── simple_dashboard/     # Standalone lightweight dashboard
-│   ├── server.py
-│   ├── ml_pipeline.py
-│   └── static/           # Static frontend files (index.html, style.css, app.js)
+├── data/                 # Datasets (large sets are gitignored — download manually)
+│   ├── ctu13/            # CTU-13 CSV flow datasets (download, see Quick Start)
+│   ├── CICDDos2019/      # CIC-DDoS2019 parquet files (download manually)
+│   └── nsl_kdd/          # NSL-KDD Train and Test text datasets
 ├── docs/                 # Academic papers, research notes, and output figures
 │   ├── paper.md
 │   ├── hybrid_system_paper.md
@@ -133,13 +134,13 @@ anamoly_detection/
 │   ├── RESEARCH.md
 │   ├── PROGRESS.md
 │   └── graphs/           # Model output charts and visualization PNGs
-├── results/              # Model run metrics, csv reports, and evaluation results
-│   ├── evaluation_metrics.csv
-│   ├── evaluation_metrics_v2.csv
-│   ├── test_traffic.csv
-│   └── nsl_kdd_evaluation_metrics.csv
+├── simple_dashboard/     # Standalone lightweight dashboard (server.py + static/)
+├── run_all.py            # One-command launcher for the project/ web app
 ├── requirements.txt      # Project Python requirements
 └── README.md             # This file
+
+# Created at runtime (gitignored): temp_uploads/, project/logs/,
+# project/datasets/, project/reports/, research/results/
 ```
 
 ---

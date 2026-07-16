@@ -16,7 +16,36 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse as FastAPIJSONResponse
+import math
+
+class SafeJSONResponse(FastAPIJSONResponse):
+    def render(self, content: any) -> bytes:
+        def sanitize_json_data(obj):
+            if isinstance(obj, dict):
+                return {k: sanitize_json_data(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [sanitize_json_data(v) for v in obj]
+            elif isinstance(obj, tuple):
+                return tuple(sanitize_json_data(v) for v in obj)
+            elif isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            elif isinstance(obj, (np.floating, np.integer)):
+                val = obj.item()
+                if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+                    return 0.0
+                return val
+            elif pd.isna(obj):
+                return None
+            return obj
+        
+        sanitized = sanitize_json_data(content)
+        return super().render(sanitized)
+
+JSONResponse = SafeJSONResponse
+
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -324,16 +353,8 @@ class OnlineCaptureManager:
                 "prediction": res["prediction"],
                 "if_score": round(res["if_score"], 4),
                 "flow_details": {
-                    "flow_byts_s": round(flow_info["flow_byts_s"], 2),
-                    "flow_pkts_s": round(flow_info["flow_pkts_s"], 2),
-                    "fwd_bytes": int(flow_info["fwd_bytes"]),
-                    "bwd_bytes": int(flow_info["bwd_bytes"]),
-                    "total_pkts": int(flow_info["total_pkts"]),
-                    "syn_flag": int(flow_info["syn_flag"]),
-                    "rst_flag": int(flow_info["rst_flag"]),
-                    "fin_flag": int(flow_info["fin_flag"]),
-                    "flow_duration_s": round(flow_info["flow_duration_s"], 4),
-                    "pkt_len_mean": round(flow_info["pkt_len_mean"], 2)
+                    k: (0.0 if (pd.isna(v) or np.isinf(v)) else (round(float(v), 4) if isinstance(v, (float, np.floating)) else int(v)))
+                    for k, v in flow_info.items() if k not in ["src_ip", "dst_ip", "protocol"]
                 },
                 "shap_explanation": shap_contrib
             }
@@ -559,7 +580,7 @@ async def analyze_dataset(file_id: str = Form(...), extension: str = Form(...)):
                 "probability": round((1.0 - res["probability"]) * 100, 2) if not is_anomaly else round(res["probability"] * 100, 2),
                 "prediction": res["prediction"],
                 "if_score": round(res["if_score"], 4),
-                "flow_details": {k: round(v, 4) if isinstance(v, float) else int(v) for k, v in row_raw.items()},
+                "flow_details": {k: (0.0 if (pd.isna(v) or np.isinf(v)) else (round(float(v), 4) if isinstance(v, (float, np.floating)) else int(v))) for k, v in row_raw.items()},
                 "shap_explanation": shap_contrib
             }
             if is_anomaly:

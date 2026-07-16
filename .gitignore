@@ -1,11 +1,3 @@
-# Large downloaded datasets (re-generate with the provided scripts)
-sample_logs/CTU13_Attack_Traffic.csv
-sample_logs/CTU13_Normal_Traffic.csv
-sample_logs/network_traffic.pcap
-
-# Claude internal directory
-.claude/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -13,3 +5,22 @@ __pycache__/
 .env
 venv/
 .venv/
+
+# Claude internal directory
+.claude/
+
+# Node / frontend build output
+node_modules/
+project/frontend/dist/
+
+# Large downloaded datasets (see README — download and place manually)
+data/ctu13/
+data/CICDDos2019/
+
+# Runtime state (created automatically by the apps)
+temp_uploads/
+project/logs/
+project/datasets/
+project/reports/
+research/results/
+*.sqlite

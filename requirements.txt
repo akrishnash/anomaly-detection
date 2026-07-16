@@ -4,6 +4,7 @@ numpy>=1.24
 matplotlib>=3.7
 scipy>=1.10
 openpyxl>=3.1.0
+pyarrow>=14.0  # parquet dataset support (CICDDoS2019 etc.)
 
 
 # --- Network & Packet Analysis ---

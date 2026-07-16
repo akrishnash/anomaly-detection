@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sentinel AI | SOC Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Space+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface-variant": "#b9cacb",
+                    "on-surface": "#e5e2e1",
+                    "secondary-fixed-dim": "#d1bcff",
+                    "on-secondary-fixed": "#23005b",
+                    "secondary-fixed": "#e9ddff",
+                    "on-error": "#690005",
+                    "on-secondary-container": "#ddcdff",
+                    "on-secondary": "#3c0090",
+                    "surface-tint": "#00dbe9",
+                    "secondary-container": "#7000ff",
+                    "primary": "#dbfcff",
+                    "primary-fixed-dim": "#00dbe9",
+                    "outline": "#849495",
+                    "tertiary-fixed": "#d8e2ff",
+                    "on-secondary-fixed-variant": "#5700c9",
+                    "surface-container-highest": "#353534",
+                    "on-primary-fixed-variant": "#004f54",
+                    "secondary": "#d1bcff",
+                    "on-tertiary": "#002e6a",
+                    "surface-bright": "#3a3939",
+                    "on-tertiary-fixed": "#001a42",
+                    "surface-container": "#201f1f",
+                    "on-primary": "#00363a",
+                    "on-primary-fixed": "#002022",
+                    "error": "#ffb4ab",
+                    "on-primary-container": "#006970",
+                    "inverse-surface": "#e5e2e1",
+                    "primary-container": "#00f0ff",
+                    "inverse-primary": "#006970",
+                    "inverse-on-surface": "#313030",
+                    "outline-variant": "#3b494b",
+                    "tertiary-container": "#cad9ff",
+                    "on-background": "#e5e2e1",
+                    "background": "#131313",
+                    "surface-dim": "#131313",
+                    "tertiary-fixed-dim": "#adc6ff",
+                    "surface": "#131313",
+                    "primary-fixed": "#7df4ff",
+                    "surface-container-high": "#2a2a2a",
+                    "tertiary": "#f4f5ff",
+                    "surface-container-low": "#1c1b1b",
+                    "on-tertiary-container": "#005ac3",
+                    "error-container": "#93000a",
+                    "surface-container-lowest": "#0e0e0e",
+                    "on-error-container": "#ffdad6",
+                    "on-tertiary-fixed-variant": "#004395",
+                    "surface-variant": "#353534"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "18px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "panel-gap": "16px",
+                    "container-max": "1440px",
+                    "margin-mobile": "16px",
+                    "gutter": "24px",
+                    "unit": "4px",
+                    "margin-desktop": "48px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Geist"],
+                    "headline-lg": ["Geist"],
+                    "label-mono": ["Space Mono"],
+                    "body-lg": ["Geist"],
+                    "display-lg": ["Geist"],
+                    "headline-lg-mobile": ["Geist"],
+                    "body-md": ["Geist"],
+                    "label-caps": ["Geist"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "label-caps": ["11px", {"lineHeight": "14px", "letterSpacing": "0.1em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #050505;
+            color: #e5e2e1;
+            overflow: hidden;
+        }
+        .glass-panel {
+            background: rgba(18, 18, 18, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        .neon-glow-cyan {
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+        .neon-border-cyan:hover {
+            border-color: #00f0ff;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+        }
+        .pulse-critical {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(255, 180, 171, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 180, 171, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 180, 171, 0); }
+        }
+        .scan-line {
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #00f0ff, transparent);
+            position: absolute;
+            top: 0;
+            animation: scan 4s linear infinite;
+            opacity: 0.3;
+        }
+        @keyframes scan {
+            from { top: 0; }
+            to { top: 100%; }
+        }
+        .map-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 5s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- Background Shader Layer -->
+<div class="fixed inset-0 z-[-1]">
+<!-- STITCH_SHADER_START:ANIMATION_1 class="absolute inset-0 w-full h-full opacity-40" -->
+<div class="absolute inset-0 w-full h-full opacity-40" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_1" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_1');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+varying vec2 v_texCoord;
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+void main() {
+    vec2 uv = v_texCoord;
+    vec2 grid = floor(uv * 40.0);
+    float h = hash(grid);
+    
+    vec3 color = vec3(0.02, 0.04, 0.08); // Base dark blue
+    
+    // Vertical "packet" streams
+    float stream = fract(uv.y * 2.0 + u_time * 0.5 + h);
+    float mask = step(0.98, stream) * step(0.7, h);
+    
+    vec3 accent = vec3(0.0, 0.8, 1.0); // Cyan
+    if(h > 0.9) accent = vec3(0.7, 0.3, 1.0); // Purple variant
+    
+    color += accent * mask * 0.6;
+    
+    // Subtle grid glow
+    float g = max(0.0, 1.0 - length(fract(uv * 40.0) - 0.5) * 2.0);
+    color += vec3(0.0, 0.3, 0.5) * pow(g, 10.0) * 0.1;
+
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_1 -->
+</div>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full w-64 border-r border-white/10 bg-surface/70 backdrop-blur-xl flex flex-col py-8 gap-panel-gap z-[60]">
+<div class="px-6 mb-8">
+<h1 class="font-display-lg text-display-lg font-bold text-primary-container tracking-tighter leading-none">Sentinel AI</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant mt-1">Vigilance System</p>
+</div>
+<div class="flex-1 flex flex-col gap-1">
+<!-- Active Tab: SOC Dashboard -->
+<a class="flex items-center gap-3 px-6 py-3 text-primary font-bold border-r-2 border-primary-container bg-primary/5 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-body-md text-body-md">SOC Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="font-body-md text-body-md">Detection Pipeline</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-body-md text-body-md">Flow Explorer</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-md text-body-md">Intelligence Reports</span>
+</a>
+</div>
+<div class="px-6 pt-4 border-t border-white/5 flex flex-col gap-1">
+<div class="flex items-center gap-2 mb-4 px-2">
+<div class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(0,240,255,0.8)]"></div>
+<span class="text-[10px] uppercase tracking-widest text-primary-container font-bold">System Health: Optimal</span>
+</div>
+<a class="flex items-center gap-3 px-2 py-2 text-on-surface-variant font-medium hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-2 py-2 text-on-surface-variant font-medium hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<div class="mt-4 flex items-center gap-3 px-2">
+<div class="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional security analyst portrait with subtle blue tech lighting, sharp focus on eyes, representing a high-level SOC operative for an advanced cybersecurity command center interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjd9qQzwkTHYivZPKokz8LFSayE0CAExD2eBncudNykFvWjK1owDv2_HtkkEGUCT6mDDoWJspqHBZZIu_T6nOCwXhxnb7GedUHlTGcoQCx3wWZxQ7LLbaNKv9vzykU__PORBtxbV3nRdLZNuXRJWo0UKpBYgu-_IT1LX556hXpH9PrQAPICL-oCbgiVXPro1WrmREbHdgGxmL7Po5hOfdQhkjwTJmAk7wx82bH2Y7hbJVX3vtvDHLX"/>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-white">SOC Tier 3</span>
+<span class="text-[10px] text-on-surface-variant">Active Session</span>
+</div>
+</div>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 flex justify-between items-center px-gutter bg-surface/50 backdrop-blur-lg border-b border-white/10 z-50">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container-lowest/50 border border-outline-variant/30 rounded-lg py-1.5 pl-10 pr-4 text-xs focus:ring-1 focus:ring-primary-container focus:border-primary-container outline-none transition-all" placeholder="Search flows, IPs, or threat signatures..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-error rounded-full border border-background"></span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+<div class="h-6 w-[1px] bg-white/10"></div>
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono text-primary-container">STATION_ID: ALPHA_01</span>
+<span class="font-label-mono text-label-mono text-on-surface-variant">09:42:15 UTC</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 px-gutter pb-12 min-h-screen relative overflow-y-auto custom-scrollbar">
+<!-- Top Row: Hero Metrics -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-panel-gap mb-panel-gap">
+<!-- Metric Card 1 -->
+<div class="glass-panel p-6 rounded-xl relative overflow-hidden group hover:border-primary/40 transition-all duration-300">
+<div class="scan-line"></div>
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">NETWORK HEALTH</span>
+<span class="material-symbols-outlined text-primary-container opacity-50">lan</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-primary neon-glow-cyan">99.4%</span>
+<span class="text-xs text-green-400 flex items-center"><span class="material-symbols-outlined text-xs">arrow_upward</span> 0.2%</span>
+</div>
+<div class="mt-4 w-full h-8 bg-surface-container-lowest rounded overflow-hidden relative">
+<div class="absolute inset-0 flex items-center px-1 gap-0.5">
+<div class="h-4 w-1 bg-primary/20"></div><div class="h-6 w-1 bg-primary/40"></div><div class="h-3 w-1 bg-primary/20"></div><div class="h-5 w-1 bg-primary/60"></div><div class="h-7 w-1 bg-primary"></div><div class="h-4 w-1 bg-primary/30"></div><div class="h-6 w-1 bg-primary/50"></div><div class="h-3 w-1 bg-primary/20"></div><div class="h-5 w-1 bg-primary/60"></div><div class="h-4 w-1 bg-primary/30"></div><div class="h-6 w-1 bg-primary/50"></div><div class="h-3 w-1 bg-primary/20"></div><div class="h-7 w-1 bg-primary"></div><div class="h-4 w-1 bg-primary/30"></div><div class="h-6 w-1 bg-primary/50"></div><div class="h-3 w-1 bg-primary/20"></div>
+</div>
+</div>
+</div>
+<!-- Metric Card 2 -->
+<div class="glass-panel p-6 rounded-xl group hover:border-primary/40 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">ACTIVE FLOWS</span>
+<span class="material-symbols-outlined text-secondary opacity-50">leak_add</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-on-surface font-bold">12,402</span>
+<span class="text-xs text-secondary-fixed-dim">FLOW/SEC</span>
+</div>
+<div class="mt-4 flex gap-1 items-end h-8">
+<div class="flex-1 bg-secondary/10 h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[65%]"></div>
+</div>
+</div>
+</div>
+<!-- Metric Card 3 -->
+<div class="glass-panel p-6 rounded-xl group hover:border-primary/40 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">PACKETS/SEC</span>
+<span class="material-symbols-outlined text-primary-fixed opacity-50">data_thresholding</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-on-surface font-bold">840k</span>
+<span class="text-xs text-on-surface-variant">INGRESS</span>
+</div>
+<div class="mt-4 overflow-hidden h-8">
+<svg class="w-full h-full stroke-primary-container fill-none opacity-40" viewbox="0 0 100 20">
+<path d="M0,10 Q10,5 20,15 T40,10 T60,5 T80,15 T100,10" stroke-width="1"></path>
+</svg>
+</div>
+</div>
+<!-- Metric Card 4 -->
+<div class="glass-panel p-6 rounded-xl relative group hover:border-error/40 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">THREAT LEVEL</span>
+<div class="w-3 h-3 rounded-full bg-error pulse-critical"></div>
+</div>
+<div class="flex flex-col">
+<span class="font-display-lg text-display-lg text-error uppercase tracking-tight">Elevated</span>
+<span class="font-label-mono text-label-mono text-error/80 -mt-2">PRIORITY: HIGH</span>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant">CURRENT CVE DELTA</span>
+<span class="text-[10px] font-bold text-error">+14 Active</span>
+</div>
+</div>
+</div>
+<!-- Center: Global Attack Map -->
+<div class="glass-panel rounded-xl p-8 mb-panel-gap relative min-h-[450px] overflow-hidden">
+<div class="absolute top-8 left-8 z-10">
+<h2 class="font-headline-md text-headline-md text-white mb-1">Live Global Threat Vector</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Real-time geolocation of ingress anomalies and lateral movement</p>
+</div>
+<div class="absolute top-8 right-8 z-10 flex flex-col gap-2">
+<div class="bg-background/80 backdrop-blur p-3 rounded-lg border border-white/5 flex items-center gap-4">
+<div class="flex flex-col">
+<span class="text-[10px] text-on-surface-variant">ORIGIN</span>
+<span class="text-xs font-mono font-bold text-primary">185.220.101.44</span>
+</div>
+<div class="w-[1px] h-8 bg-white/10"></div>
+<div class="flex flex-col">
+<span class="text-[10px] text-on-surface-variant">VECTOR</span>
+<span class="text-xs font-mono font-bold text-error">DDoS/UDP Flood</span>
+</div>
+</div>
+<div class="bg-background/80 backdrop-blur p-3 rounded-lg border border-white/5 flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant">ACTIVE ATTACKS</span>
+<span class="text-sm font-bold text-error">1,204</span>
+</div>
+</div>
+<!-- Visualization Placeholder (Map) -->
+<div class="absolute inset-0 w-full h-full flex items-center justify-center opacity-80 pointer-events-none">
+<div class="w-full h-full bg-contain bg-center bg-no-repeat grayscale brightness-50" data-alt="A stylized vector map of the world in dark obsidian and charcoal tones, with glowing cyan neon dots for safe nodes and pulsating red circles for attack origins. Arching, glowing red lines represent attack trajectories globally, with a concentrated target point in North America. The aesthetic is high-tech, futuristic, and professional, like a cinematic war room screen." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAAvaL1sEs5uSjCjzm2rOelJhMhioq5LOX1G-ry63unKA7Pfc53t2HWz8-lyOakCjj0j97FSHBlp9SzpBXo17jsuQ1jxuHUYDwAz2fELkSQiupHC7dwaYMRAw8kWctDbs-X6xDixYs3OAiX82MxvNCuiTP2tRyuMTTM4pUYXu1oY1xHG9j4KGiINFGzkKdz2lQbooWgd2IurkKboyckAphvI91xQzkOPDdZV3zg6L4PEHoZ-8q_OZfr')"></div>
+<!-- Animated Attack Overlay (SVG) -->
+<svg class="absolute inset-0 w-full h-full" preserveaspectratio="xMidYMid slice">
+<path class="map-line" d="M 200,400 Q 500,200 800,350" fill="none" opacity="0.4" stroke="#ffb4ab" stroke-width="1.5"></path>
+<path class="map-line" d="M 300,500 Q 600,100 850,350" fill="none" opacity="0.3" stroke="#ffb4ab" stroke-width="1.5" style="animation-delay: 1.5s"></path>
+<path class="map-line" d="M 900,200 Q 700,150 820,340" fill="none" opacity="0.5" stroke="#ffb4ab" stroke-width="1.5" style="animation-delay: 0.5s"></path>
+<circle class="animate-pulse" cx="815" cy="345" fill="url(#target-gradient)" r="40"></circle>
+<defs>
+<radialgradient id="target-gradient">
+<stop offset="0%" stop-color="#00f0ff" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#00f0ff" stop-opacity="0"></stop>
+</radialgradient>
+</defs>
+</svg>
+</div>
+<!-- Map Controls -->
+<div class="absolute bottom-8 left-8 flex gap-2">
+<button class="bg-surface-container-high hover:bg-surface-bright px-3 py-1.5 rounded-lg border border-white/5 text-xs text-white transition-all">2D VIEW</button>
+<button class="bg-primary/20 px-3 py-1.5 rounded-lg border border-primary/30 text-xs text-primary font-bold transition-all">3D TOPOLOGY</button>
+<button class="bg-surface-container-high hover:bg-surface-bright px-3 py-1.5 rounded-lg border border-white/5 text-xs text-white transition-all">HEATMAP</button>
+</div>
+</div>
+<!-- Bottom Row: High-Level Detection Metrics -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-panel-gap">
+<!-- Confidence Card -->
+<div class="glass-panel p-6 rounded-xl flex items-center gap-6 group">
+<div class="w-16 h-16 rounded-full border-4 border-primary/20 flex items-center justify-center relative">
+<svg class="absolute inset-0 w-full h-full -rotate-90">
+<circle cx="32" cy="32" fill="none" r="28" stroke="#00f0ff" stroke-dasharray="175" stroke-dashoffset="10" stroke-width="4"></circle>
+</svg>
+<span class="font-bold text-primary text-sm">94%</span>
+</div>
+<div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-1">ENSEMBLE CONFIDENCE</h3>
+<p class="font-headline-md text-headline-md text-white">High Fidelity</p>
+<p class="text-[10px] text-on-surface-variant mt-1 italic">Cross-referenced via 12 AI models</p>
+</div>
+</div>
+<!-- Accuracy Card -->
+<div class="glass-panel p-6 rounded-xl flex items-center gap-6 group">
+<div class="w-16 h-16 rounded-full border-4 border-secondary/20 flex items-center justify-center relative">
+<svg class="absolute inset-0 w-full h-full -rotate-90">
+<circle cx="32" cy="32" fill="none" r="28" stroke="#d1bcff" stroke-dasharray="175" stroke-dashoffset="1.5" stroke-width="4"></circle>
+</svg>
+<span class="font-bold text-secondary text-sm">99.1%</span>
+</div>
+<div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-1">DETECTION ACCURACY</h3>
+<p class="font-headline-md text-headline-md text-white">Superior Precision</p>
+<p class="text-[10px] text-on-surface-variant mt-1">Validated against MITRE ATT&amp;CK</p>
+</div>
+</div>
+<!-- FP Rate Card -->
+<div class="glass-panel p-6 rounded-xl flex items-center gap-6 group">
+<div class="w-16 h-16 rounded-full border-4 border-white/5 flex items-center justify-center relative">
+<svg class="absolute inset-0 w-full h-full -rotate-90">
+<circle cx="32" cy="32" fill="none" opacity="0.4" r="28" stroke="#e5e2e1" stroke-dasharray="175" stroke-dashoffset="170" stroke-width="2"></circle>
+</svg>
+<span class="font-bold text-white text-sm">0.04%</span>
+</div>
+<div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-1">FALSE POSITIVE RATE</h3>
+<p class="font-headline-md text-headline-md text-white">Negligible Noise</p>
+<p class="text-[10px] text-on-surface-variant mt-1">Reduced analyst fatigue by 40%</p>
+</div>
+</div>
+</div>
+<!-- Terminal View Section -->
+<div class="mt-panel-gap">
+<div class="glass-panel rounded-xl overflow-hidden border border-white/5">
+<div class="bg-surface-container-highest/50 px-4 py-2 border-b border-white/5 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-error/40"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-yellow-500/40"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-green-500/40"></div>
+</div>
+<span class="font-label-mono text-[10px] text-on-surface-variant ml-4 tracking-wider">LIVE_SYSTEM_LOGS: SENTINEL-DAEMON-B</span>
+</div>
+<span class="font-label-mono text-[10px] text-primary-container animate-pulse">RECORDING...</span>
+</div>
+<div class="p-4 font-label-mono text-[11px] leading-relaxed text-on-surface-variant h-40 overflow-y-hidden bg-black/40">
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:01</span>
+<span class="text-white">INITIALIZING ENSEMBLE PIPELINE [NODE_7]... DONE</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:03</span>
+<span class="text-on-surface">FLOW_CAPTURED: 192.168.1.105 -&gt; 45.33.22.11 [TCP/443]</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:05</span>
+<span class="text-secondary">SCORING_ENGINE: CALCULATING ANOMALY VECTOR [VAL: 0.12]</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:08</span>
+<span class="text-error font-bold">WARNING: DETECTED UNUSUAL ENTROPY IN DNS TRAFFIC</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:10</span>
+<span class="text-primary-container font-bold">SENTINEL_AI: AUTO-MITIGATION TRIGGERED ON ENDPOINT_ID_091</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary-container/40">09:42:15</span>
+<span class="text-white">WAITING FOR NEXT PACKET BURST...</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Micro-interactions for glass panels
+        document.querySelectorAll('.glass-panel').forEach(panel => {
+            panel.addEventListener('mousemove', (e) => {
+                const rect = panel.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                panel.style.setProperty('--mouse-x', `${x}px`);
+                panel.style.setProperty('--mouse-y', `${y}px`);
+            });
+        });
+
+        // Simple terminal log simulator
+        const terminal = document.querySelector('.p-4.font-label-mono');
+        const logs = [
+            { time: "09:42:18", color: "text-white", text: "HEARTBEAT_ACK: NODE_B_PRIMARY" },
+            { time: "09:42:21", color: "text-on-surface", text: "PEERING_ESTABLISHED with EU-WEST-2" },
+            { time: "09:42:24", color: "text-secondary", text: "NEURAL_NET_RELAY: SYNCING WEIGHTS..." },
+            { time: "09:42:27", color: "text-error", text: "MALICIOUS_SIGNATURE_MATCH [CVE-2024-991] @ 10.0.0.45" }
+        ];
+
+        let i = 0;
+        setInterval(() => {
+            const log = logs[i % logs.length];
+            const div = document.createElement('div');
+            div.className = "flex gap-4 animate-in fade-in slide-in-from-bottom-1 duration-500";
+            div.innerHTML = `<span class="text-primary-container/40">${log.time}</span><span class="${log.color}">${log.text}</span>`;
+            terminal.appendChild(div);
+            if (terminal.children.length > 8) terminal.removeChild(terminal.children[0]);
+            i++;
+        }, 3000);
+    </script>
+</body></html>

@@ -4,7 +4,7 @@ Conversion of the deployable `project/` IDS app from a supervised XGBoost detect
 into a **fully unsupervised two-stage DDoS classifier** that operates on unlabeled
 flow or PCAP data.
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-16_
 
 ---
 
@@ -92,6 +92,134 @@ Stage 2 (subtype typing)  ddos_classifier.py
   `OfflineDetection.jsx` (progress-stage text).
 - **`test_backend.py`** — replaced XGBoost tests with `anomaly_detector`
   calibration + `ddos_classifier` rule-engine + campaign-aggregation tests.
+
+---
+
+## 2026-07-16 — UI traceability & per-attack-type detail
+
+Goal: beyond the pie chart, surface graphs + packet details per DDoS type, and
+make every verdict traceable (why was this flow classified as attack X?).
+
+### Backend
+- **`anomaly_detector.py`** — new `score_flows_detailed()` also returns the
+  per-head **calibrated** probabilities (`if_probs`, `ae_probs`), so callers can
+  show which head crossed the threshold. `score_flows()` is now a wrapper.
+- **`ddos_classifier.py`** — `aggregate_campaigns` refinements are now 3-tuples
+  `(attack_type, severity, reason)`; `reason` is a human-readable sentence
+  recording the cross-flow evidence (e.g. "40 unique sources converging on
+  10.0.0.5, entropy 1.00"). CLI records `refined_from`/`refinement_reason`.
+- **`api.py` `/start-offline`** — each flow now carries:
+  - `evidence[]` + `rule_confidence` (structured, no longer only baked into text);
+  - `classification_trace` with `stage1_anomaly_detection` (raw + calibrated IF/AE
+    scores, threshold, `triggered_by`, decision), `stage2_rule_engine`
+    (matched signature, confidence, evidence), `stage3_campaign_refinement`
+    (original → refined label + reason, or null).
+  Response gains `severities[]`, `score_distribution[]` (10-bin histogram of
+  ensemble scores split normal/attack), and `attack_details[]` (per attack type:
+  flows, packets, bytes, SYN pkts, avg/peak pps, severity mix, top 5 sources,
+  top 5 targets, ports, example evidence).
+- **`packet_capture.py`** — consumes the 3-tuple refinements; alerts carry
+  `refinement_reason`.
+
+### Frontend (`OfflineDetection.jsx`)
+- New charts row: **severity distribution** (status-colored bars) and
+  **ensemble score distribution** histogram (benign vs anomalous, stacked).
+- **Campaigns panel** — renders the previously-dropped `campaigns[]` (target,
+  label, severity, flows, sources, entropy, ports, subtype breakdown).
+- **Attack Type Packet Details** cards — per-DDoS-type packets/bytes/rates/top
+  sources/targets; clicking a card filters the flow explorer to that type.
+- **Classification Trace** panel in each expanded flow: Stage 1 head bars vs
+  threshold ("which detector fired"), Stage 2 evidence bullets + rule
+  confidence, Stage 3 campaign escalation reason. Severity badge on each row.
+
+### Verified
+- `python -m unittest test_backend` → **7/7 pass** (campaign tests extended to
+  assert the refinement reason).
+- End-to-end TestClient smoke test (40-source synthetic SYN flood CSV through
+  `/api/upload` + `/api/start-offline`): all new fields present; flood flows
+  trace Stage 1 (both heads fired) → Stage 2 (SYN-flood evidence, 95% rule
+  confidence) → Stage 3 (escalated to "DDoS: SYN Flood", Critical).
+- `npm run build` (frontend) → success.
+
+---
+
+## 2026-07-16 — Google Stitch "Sentinel AI" UI integration
+
+Integrated the 4 Stitch-designed screens (`ui stitch/`) into `project/frontend`
+as fully data-wired React pages, keeping the "Obsidian Sentinel" design system
+(glassmorphism, Electric Cyan/Neon Purple, Geist + Space Mono + Material
+Symbols). **Zero CDN dependencies** — built for offline machines.
+
+### Offline assets
+- Fonts downloaded to `src/assets/fonts/` (Geist variable, Space Mono 400/700,
+  Material Symbols Outlined variable ~3.9 MB full icon set) with a local
+  `fonts.css`; verified the production bundle contains **no external URLs**.
+- Stitch's CDN Tailwind replaced by the existing build-time Tailwind; design
+  tokens from `DESIGN.md` merged into `tailwind.config.js`.
+- Remote Stitch images (avatar, world map, textures) replaced with local
+  SVG/CSS equivalents; the WebGL shader background was ported as a React
+  component (`src/sentinel/ShaderBackground.jsx`).
+
+### New frontend structure
+- `src/sentinel/` — `SentinelLayout.jsx` (sidebar + topbar shell, live clock,
+  model-health indicator, search → Flow Explorer), `ShaderBackground.jsx`,
+  `common.jsx` (severity/attack-icon helpers), `sentinel.css`.
+- `src/pages/sentinel/SocDashboard.jsx` (**home**) — model health, analyzed
+  flows, anomalies, derived threat level; campaign vector SVG (animated
+  source→target arcs from real `campaigns[]`/`attack_details[]`); confidence /
+  accuracy / benign ring cards; live backend log terminal (`/api/logs`).
+- `src/pages/sentinel/DetectionPipeline.jsx` — upload + run wired to
+  `/api/upload` + `/api/start-offline`; 8-stage animated pipeline rail;
+  real ensemble score-distribution histogram; model-asset health; log terminal.
+- `src/pages/sentinel/FlowExplorer.jsx` — filterable flow table (IP/severity/
+  protocol/attack type, anomalies-only toggle); expandable rows render the real
+  3-stage `classification_trace`; JSON export; footer stats.
+- `src/pages/sentinel/DdosClassifier.jsx` — per-subtype cards from
+  `attack_details[]` (packets, volume, rates, top attacker, ports, evidence,
+  rule confidence) linking into the explorer; anomaly gauge, severity
+  distribution, campaign list sidebar.
+- `App.jsx` — Sentinel shell hosts everything; legacy pages kept as
+  "Analytics (Live)", "Live Capture", "Intelligence Reports", "Settings".
+
+### Backend additions
+- `GET /api/last-run` — the last completed offline analysis is kept in memory
+  and replayed to all screens after a page refresh.
+- `attack_details[]` now includes `avg_rule_confidence` (per-subtype mean of
+  Stage 2 rule confidence) for the classifier cards.
+
+### Verified
+- `npm run build` ✓ (bundle scanned: no external hosts).
+- Backend unit tests 7/7 ✓; smoke test extended to cover `/api/last-run`
+  parity + `avg_rule_confidence`.
+- Live run: uvicorn + Vite (port 3000), synthetic 112-flow CSV through the
+  real API → 3 campaigns (DDoS: SYN Flood, DNS Amplification), all Sentinel
+  modules transform HTTP 200 through the dev server.
+
+---
+
+## 2026-07-16 — Parquet ingestion (CICDDoS2019)
+
+- **`api.py`** — `/api/upload` + `/api/start-offline` accept `.parquet`
+  (pyarrow metadata read for fast row counts; `to_json` preview handles
+  timestamps/NaN). Ground-truth label parsing generalized: any non-benign
+  label ("Syn", "DrDoS_DNS", …) counts as attack, and label-column detection
+  tolerates CIC's leading-space " Label".
+- **`ddos_classifier.py` CLI** — `--input file.parquet` supported.
+- **`preprocessing.py`** — alias dictionary extended with CICDDoS2019 parquet
+  spellings (`Fwd/Bwd Packets Length Total`, `Total Length of Fwd/Bwd
+  Packets`, `Subflow Fwd/Bwd Bytes`) so byte features no longer zero out.
+- **Frontend** — both file pickers (Sentinel Detection Pipeline + legacy
+  Offline page) accept `.parquet`. `pyarrow` added to `requirements.txt`.
+- Verified with `data/CICDDos2019/Syn-testing.parquet`: 907 flows / 78 cols
+  ingest cleanly, subtypes fire, labels parsed (533 Syn / 374 Benign).
+
+**Known limitation confirmed on CICDDoS2019:** its SYN-flood rows are 2–4
+packet, 0-byte micro-flows with `SYN Flag Count = 0` (CICFlowMeter artifact),
+so the CTU-13-calibrated Stage 1 scores them ~0.33 — below threshold →
+recall ≈ 0 on this dataset. This is limitation #2 (fragmenting spoofed SYN
+floods); fixing it needs either retraining/calibrating on CICDDoS2019 benign
+traffic or the planned per-`destination:port` aggregation pass, not a change
+to file ingestion.
 
 ---
 

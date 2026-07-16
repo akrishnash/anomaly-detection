@@ -109,7 +109,7 @@ Incoming Traffic (NIC / Replay / Stream)
    ```bash
    npm run dev
    ```
-3. Open your browser and navigate to `http://localhost:3000`. Requests to `/api` are automatically proxied to the FastAPI server at `http://127.0.0.1:8000`.
+3. Open your browser and navigate to `http://localhost:5173`. Requests to `/api` are automatically proxied to the FastAPI server at `http://127.0.0.1:8000`.
 
 ### 3. Standalone DDoS Classifier CLI
 

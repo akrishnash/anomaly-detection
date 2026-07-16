@@ -95,8 +95,8 @@ def main():
     
     # Give servers a few seconds to boot, then open browser
     time.sleep(4)
-    print("\n[+] Both servers launched. Opening browser at http://localhost:3000...")
-    webbrowser.open("http://localhost:3000")
+    print("\n[+] Both servers launched. Opening browser at http://localhost:5173...")
+    webbrowser.open("http://localhost:5173")
     
     print("\n[*] Orchestrator is running. Press Ctrl+C to stop both servers gracefully.\n")
     

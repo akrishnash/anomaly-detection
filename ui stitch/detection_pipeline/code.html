@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sentinel AI | Detection Pipeline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Space+Mono:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Space+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(18, 18, 18, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+        }
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+        }
+        .pipeline-line {
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.4), transparent);
+            height: 2px;
+            width: 100%;
+            position: absolute;
+            top: 50%;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .pipeline-line::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #00f0ff, transparent);
+            animation: data-flow 3s infinite linear;
+        }
+        @keyframes data-flow {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        .pulse-indicator {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        body {
+            background-color: #050505;
+            color: #e5e2e1;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #050505; }
+        ::-webkit-scrollbar-thumb { background: #3b494b; border-radius: 10px; }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "on-surface-variant": "#b9cacb",
+                "on-surface": "#e5e2e1",
+                "secondary-fixed-dim": "#d1bcff",
+                "on-secondary-fixed": "#23005b",
+                "secondary-fixed": "#e9ddff",
+                "on-error": "#690005",
+                "on-secondary-container": "#ddcdff",
+                "on-secondary": "#3c0090",
+                "surface-tint": "#00dbe9",
+                "secondary-container": "#7000ff",
+                "primary": "#dbfcff",
+                "primary-fixed-dim": "#00dbe9",
+                "outline": "#849495",
+                "tertiary-fixed": "#d8e2ff",
+                "on-secondary-fixed-variant": "#5700c9",
+                "surface-container-highest": "#353534",
+                "on-primary-fixed-variant": "#004f54",
+                "secondary": "#d1bcff",
+                "on-tertiary": "#002e6a",
+                "surface-bright": "#3a3939",
+                "on-tertiary-fixed": "#001a42",
+                "surface-container": "#201f1f",
+                "on-primary": "#00363a",
+                "on-primary-fixed": "#002022",
+                "error": "#ffb4ab",
+                "on-primary-container": "#006970",
+                "inverse-surface": "#e5e2e1",
+                "primary-container": "#00f0ff",
+                "inverse-primary": "#006970",
+                "inverse-on-surface": "#313030",
+                "outline-variant": "#3b494b",
+                "tertiary-container": "#cad9ff",
+                "on-background": "#e5e2e1",
+                "background": "#131313",
+                "surface-dim": "#131313",
+                "tertiary-fixed-dim": "#adc6ff",
+                "surface": "#131313",
+                "primary-fixed": "#7df4ff",
+                "surface-container-high": "#2a2a2a",
+                "tertiary": "#f4f5ff",
+                "surface-container-low": "#1c1b1b",
+                "on-tertiary-container": "#005ac3",
+                "error-container": "#93000a",
+                "surface-container-lowest": "#0e0e0e",
+                "on-error-container": "#ffdad6",
+                "on-tertiary-fixed-variant": "#004395",
+                "surface-variant": "#353534"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "panel-gap": "16px",
+                "container-max": "1440px",
+                "margin-mobile": "16px",
+                "gutter": "24px",
+                "unit": "4px",
+                "margin-desktop": "48px"
+            },
+            "fontFamily": {
+                "headline-md": ["Geist"],
+                "headline-lg": ["Geist"],
+                "label-mono": ["Space Mono"],
+                "body-lg": ["Geist"],
+                "display-lg": ["Geist"],
+                "headline-lg-mobile": ["Geist"],
+                "body-md": ["Geist"],
+                "label-caps": ["Geist"]
+            },
+            "fontSize": {
+                "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                "label-caps": ["11px", {"lineHeight": "14px", "letterSpacing": "0.1em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="font-body-md text-body-md">
+<!-- SideNavBar Anchor -->
+<aside class="fixed left-0 top-0 h-full w-64 border-r border-white/10 bg-surface/70 backdrop-blur-xl flex flex-col py-margin-mobile gap-panel-gap z-[60]">
+<div class="px-gutter mb-8">
+<h1 class="font-display-lg text-display-lg font-bold text-primary-container tracking-tighter">Sentinel AI</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Vigilance System</p>
+</div>
+<nav class="flex-1 space-y-2 px-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">SOC Dashboard</span>
+</a>
+<!-- ACTIVE TAB: Detection Pipeline -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-primary font-bold border-r-2 border-primary-container bg-primary/5 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="font-body-md text-body-md">Detection Pipeline</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-body-md text-body-md">Flow Explorer</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-md text-body-md">Intelligence Reports</span>
+</a>
+</nav>
+<div class="mt-auto px-4 space-y-2">
+<div class="px-4 py-2 mb-4 bg-primary/10 border border-primary/20 rounded-lg">
+<p class="text-[10px] text-primary-fixed uppercase font-bold">System Health: Optimal</p>
+<div class="h-1 w-full bg-surface-container-highest mt-1 rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-4/5"></div>
+</div>
+</div>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant font-medium hover:bg-white/5 hover:text-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+</div>
+</aside>
+<!-- TopAppBar Anchor -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface/50 backdrop-blur-lg border-b border-white/10 flex justify-between items-center px-gutter z-50">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container-lowest border-none rounded-full pl-10 text-sm focus:ring-1 focus:ring-primary-container transition-all" placeholder="Search logs, threats, or assets..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 bg-primary/5 border border-primary/20 rounded-full">
+<span class="w-2 h-2 rounded-full bg-primary-container pulse-indicator"></span>
+<span class="font-label-mono text-label-mono text-primary">SOC Tier 3</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<button class="hover:text-primary-fixed-dim transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+<button class="hover:text-primary-fixed-dim transition-colors"><span class="material-symbols-outlined">account_circle</span></button>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 px-margin-desktop min-h-screen pb-12 relative">
+<!-- Background Animation -->
+<!-- STITCH_SHADER_START:ANIMATION_1 class="fixed inset-0 pointer-events-none opacity-20" -->
+<div class="fixed inset-0 pointer-events-none opacity-20" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_1" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_1');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+varying vec2 v_texCoord;
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+void main() {
+    vec2 uv = v_texCoord;
+    vec2 grid = floor(uv * 40.0);
+    float h = hash(grid);
+    
+    vec3 color = vec3(0.02, 0.04, 0.08); // Base dark blue
+    
+    // Vertical "packet" streams
+    float stream = fract(uv.y * 2.0 + u_time * 0.5 + h);
+    float mask = step(0.98, stream) * step(0.7, h);
+    
+    vec3 accent = vec3(0.0, 0.8, 1.0); // Cyan
+    if(h > 0.9) accent = vec3(0.7, 0.3, 1.0); // Purple variant
+    
+    color += accent * mask * 0.6;
+    
+    // Subtle grid glow
+    float g = max(0.0, 1.0 - length(fract(uv * 40.0) - 0.5) * 2.0);
+    color += vec3(0.0, 0.3, 0.5) * pow(g, 10.0) * 0.1;
+
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_1 -->
+<!-- Page Header -->
+<div class="mb-8 relative z-10 flex justify-between items-end">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-primary tracking-tight">Detection Pipeline</h2>
+<p class="text-on-surface-variant mt-1">Real-time packet inspection and ensemble heuristic analysis.</p>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2 bg-primary-container text-background font-bold rounded-lg transition-all hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] active:scale-95">RESTART PIPELINE</button>
+<button class="px-6 py-2 border border-white/10 hover:bg-white/5 transition-all rounded-lg font-bold">CONFIGURE STAGES</button>
+</div>
+</div>
+<!-- Pipeline Visualization -->
+<section class="glass-panel p-8 mb-panel-gap relative overflow-x-auto">
+<div class="relative flex items-center justify-between min-w-[1200px] h-64 px-12">
+<!-- Data Flow Lines -->
+<div class="pipeline-line"></div>
+<!-- Stages -->
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-primary-container/40 neon-glow-primary">
+<span class="material-symbols-outlined text-primary-container mb-2 text-3xl">upload_file</span>
+<span class="font-label-caps text-[10px] uppercase">Upload PCAP</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+<span class="text-[10px] font-label-mono text-primary-container">ACTIVE</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 hover:border-primary-container/40 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">cyclone</span>
+<span class="font-label-caps text-[10px] uppercase">Flow Generator</span>
+</div>
+<div class="flex items-center gap-2 opacity-50">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">READY</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 hover:border-primary-container/40 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">database</span>
+<span class="font-label-caps text-[10px] uppercase">Feature Extraction</span>
+</div>
+<div class="flex items-center gap-2 opacity-50">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">READY</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 hover:border-primary-container/40 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">align_horizontal_center</span>
+<span class="font-label-caps text-[10px] uppercase">Data Normalization</span>
+</div>
+<div class="flex items-center gap-2 opacity-50">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">READY</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10 scale-110">
+<div class="w-36 h-36 glass-panel flex flex-col items-center justify-center p-4 text-center border-primary-container bg-primary-container/5 neon-glow-primary">
+<span class="material-symbols-outlined text-primary-container mb-2 text-4xl pulse-indicator">forest</span>
+<span class="font-label-caps text-[11px] uppercase text-primary-container font-bold">Stage 1: Isolation Forest</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container pulse-indicator"></span>
+<span class="text-[10px] font-label-mono text-primary-container">PROCESSING</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 opacity-50">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">gavel</span>
+<span class="font-label-caps text-[10px] uppercase">Ensemble Decision</span>
+</div>
+<div class="text-[10px] font-label-mono text-on-surface-variant/40">WAITING...</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 opacity-50">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">shield_locked</span>
+<span class="font-label-caps text-[10px] uppercase">Stage 2: DDoS Engine</span>
+</div>
+<div class="text-[10px] font-label-mono text-on-surface-variant/40">WAITING...</div>
+</div>
+<div class="flex flex-col items-center gap-4 relative z-10">
+<div class="w-32 h-32 glass-panel flex flex-col items-center justify-center p-4 text-center border-white/10 opacity-50">
+<span class="material-symbols-outlined text-on-surface-variant mb-2 text-3xl">summarize</span>
+<span class="font-label-caps text-[10px] uppercase">Threat Report</span>
+</div>
+<div class="text-[10px] font-label-mono text-on-surface-variant/40">QUEUE...</div>
+</div>
+</div>
+</section>
+<!-- Secondary Metrics Row -->
+<div class="grid grid-cols-12 gap-panel-gap mb-panel-gap">
+<!-- Live Processing -->
+<div class="col-span-8 glass-panel p-6 flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-primary">Live Processing</h3>
+<div class="flex items-center gap-6">
+<div class="text-right">
+<p class="text-[10px] font-label-caps text-on-surface-variant">THROUGHPUT</p>
+<p class="font-label-mono text-xl text-primary-container" id="throughput">4.2 GB/s</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] font-label-caps text-on-surface-variant">PACKET COUNT</p>
+<p class="font-label-mono text-xl text-primary" id="packet-counter">89,451,202</p>
+</div>
+</div>
+</div>
+<!-- Progress Timeline -->
+<div class="flex-1 flex flex-col justify-end gap-4">
+<div class="h-12 flex items-end gap-1 px-2">
+<!-- Dynamic Bar Graph Mockup -->
+<div class="flex-1 bg-primary/20 h-[60%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/30 h-[75%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/20 h-[40%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/40 h-[90%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container h-[95%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/40 h-[80%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/20 h-[50%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/30 h-[65%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/20 h-[45%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container h-[100%] rounded-t-sm neon-glow-primary"></div>
+</div>
+<div class="relative w-full h-1 bg-surface-container-highest rounded-full">
+<div class="absolute left-0 top-0 h-full w-[65%] bg-primary-container"></div>
+<div class="absolute left-[65%] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_#00f0ff]"></div>
+</div>
+<div class="flex justify-between text-[10px] font-label-mono text-on-surface-variant">
+<span>00:00:00</span>
+<span>00:15:30 ELAPSED</span>
+<span>EST. COMPLETION: 04:22:15</span>
+</div>
+</div>
+</div>
+<!-- Resource Usage -->
+<div class="col-span-4 glass-panel p-6">
+<h3 class="font-headline-md text-headline-md text-primary mb-6">System Resources</h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-label-caps text-on-surface-variant uppercase">CPU LOAD</span>
+<span class="font-label-mono text-primary-container">84%</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[84%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-label-caps text-on-surface-variant uppercase">MEMORY USAGE</span>
+<span class="font-label-mono text-primary-container">12.4 GB / 16.0 GB</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[77.5%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-label-caps text-on-surface-variant uppercase">NVMe I/O</span>
+<span class="font-label-mono text-primary-container">1.2 TB/s</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[45%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Terminal Log View -->
+<section class="glass-panel overflow-hidden border-primary/20">
+<div class="bg-surface-container-highest/50 px-4 py-2 flex items-center justify-between border-b border-white/10">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+<div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+<div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+<span class="ml-4 font-label-mono text-xs text-on-surface-variant">pipeline_worker_node_01.log</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">open_in_full</span>
+</div>
+<div class="p-6 font-label-mono text-xs leading-relaxed text-on-surface/80 bg-[#0A0A0A] h-48 overflow-y-auto">
+<p><span class="text-primary-container">[08:44:21]</span> <span class="text-secondary">INF</span> Initializing PCAP stream handler...</p>
+<p><span class="text-primary-container">[08:44:22]</span> <span class="text-secondary">INF</span> Found 4 network interfaces. Listening on 'eth0'.</p>
+<p><span class="text-primary-container">[08:44:25]</span> <span class="text-secondary">INF</span> Extracting flow features: [Duration, Protocol, Bytes_Sent, Bytes_Rcvd]</p>
+<p><span class="text-primary-container">[08:44:28]</span> <span class="text-secondary">INF</span> Normalization layer applied (Z-Score scaling).</p>
+<p><span class="text-primary-container">[08:44:30]</span> <span class="text-error font-bold">[!] WRN</span> Anomaly detected in Flow ID #8841-A. Isolation score: 0.942</p>
+<p><span class="text-primary-container">[08:44:32]</span> <span class="text-secondary">INF</span> Forwarding high-score anomalies to Stage 2 DDoS Engine...</p>
+<p><span class="text-primary-container">[08:44:35]</span> <span class="text-primary-container font-bold">[+] SUCCESS</span> Stage 1 processing cycle complete in 1.4s.</p>
+<p><span class="text-primary-container">[08:44:40]</span> <span class="text-secondary">INF</span> Polling buffer for new PCAP fragments...</p>
+</div>
+</section>
+</main>
+<!-- Floating Action Buttons Contextual Check: Pipeline Active -->
+<div class="fixed bottom-8 right-8 z-[100] flex flex-col gap-4">
+<button class="w-14 h-14 rounded-full bg-primary-container text-background shadow-xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 group relative">
+<span class="material-symbols-outlined">add</span>
+<div class="absolute right-16 bg-surface p-2 rounded border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap text-xs">New Pipeline Task</div>
+</button>
+</div>
+<script>
+        // Counter Interactivity
+        const packetEl = document.getElementById('packet-counter');
+        const throughputEl = document.getElementById('throughput');
+        let count = 89451202;
+        
+        setInterval(() => {
+            count += Math.floor(Math.random() * 5000);
+            packetEl.innerText = count.toLocaleString();
+            
+            const throughput = (4.0 + Math.random() * 0.8).toFixed(1);
+            throughputEl.innerText = `${throughput} GB/s`;
+        }, 100);
+
+        // Terminal auto-scroll
+        const logWindow = document.querySelector('.overflow-y-auto');
+        setInterval(() => {
+            logWindow.scrollTop = logWindow.scrollHeight;
+        }, 1000);
+    </script>
+</body></html>

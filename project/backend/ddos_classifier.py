@@ -198,7 +198,9 @@ def aggregate_campaigns(anomalous_flows: list) -> tuple[list, dict]:
             {id, src_ip, dst_ip, dst_port, attack_type, severity, total_pkts}
     Returns:
         campaigns: list of campaign summaries (one per attacked target).
-        refinements: {flow_id: (attack_type, severity)} label upgrades to apply.
+        refinements: {flow_id: (attack_type, severity, reason)} label upgrades
+            to apply; `reason` records the cross-flow evidence that justified
+            the upgrade, so the final verdict stays traceable.
     """
     campaigns = []
     refinements = {}
@@ -218,8 +220,11 @@ def aggregate_campaigns(anomalous_flows: list) -> tuple[list, dict]:
             for f in flows
         ):
             scan_srcs.add(src)
+            reason = (f"source {src} probed {len(ports)} distinct destination "
+                      f"host:port pairs across {len(flows)} anomalous flows — "
+                      f"regrouped as a reconnaissance sweep")
             for f in flows:
-                refinements[f["id"]] = ("Port Scan / Recon", "High")
+                refinements[f["id"]] = ("Port Scan / Recon", "High", reason)
 
     # ── Campaign aggregation: many flows converging on one target ──
     by_dst = {}
@@ -242,9 +247,12 @@ def aggregate_campaigns(anomalous_flows: list) -> tuple[list, dict]:
         if distributed and dominant_type != "Unknown Anomaly":
             label = f"DDoS: {dominant_type} (distributed: {n_sources} sources)"
             severity = "Critical"
+            reason = (f"flow converges on target {dst_ip} together with "
+                      f"{len(flows) - 1} other anomalous flows from {n_sources} unique sources "
+                      f"(source-IP entropy {src_entropy:.2f}) — escalated to a distributed campaign")
             for f in flows:
                 if f.get("attack_type") == dominant_type:
-                    refinements[f["id"]] = (f"DDoS: {dominant_type}", "Critical")
+                    refinements[f["id"]] = (f"DDoS: {dominant_type}", "Critical", reason)
         elif distributed:
             label = f"DDoS: Unclassified Flood (distributed: {n_sources} sources)"
             severity = "Critical"
@@ -318,8 +326,11 @@ def analyze_file(input_path: str, threshold: float = 0.5) -> dict:
     elif ext in (".xlsx", ".xls"):
         df_raw = pd.read_excel(input_path)
         num_packets = None
+    elif ext == ".parquet":
+        df_raw = pd.read_parquet(input_path)
+        num_packets = None
     else:
-        raise ValueError(f"Unsupported input format '{ext}'. Use .pcap, .pcapng, .csv, .xlsx or .xls.")
+        raise ValueError(f"Unsupported input format '{ext}'. Use .pcap, .pcapng, .csv, .xlsx, .xls or .parquet.")
 
     if len(df_raw) == 0:
         raise ValueError("Input contains no flows/packets.")
@@ -364,7 +375,10 @@ def analyze_file(input_path: str, threshold: float = 0.5) -> dict:
     campaigns, refinements = aggregate_campaigns(anomalous)
     for rec in flows_out:
         if rec["id"] in refinements:
-            rec["attack_type"], rec["severity"] = refinements[rec["id"]]
+            new_type, new_severity, reason = refinements[rec["id"]]
+            rec["refined_from"] = rec["attack_type"]
+            rec["refinement_reason"] = reason
+            rec["attack_type"], rec["severity"] = new_type, new_severity
 
     subtype_counts = Counter(r["attack_type"] for r in flows_out if r["is_anomaly"])
 
@@ -415,7 +429,7 @@ if __name__ == "__main__":
         description="Classify DDoS attack subtypes in a PCAP or flow CSV using the "
                     "unsupervised anomaly detector (Stage 1) + rule engine (Stage 2)."
     )
-    parser.add_argument("--input", "-i", required=True, help="Path to .pcap/.pcapng/.csv/.xlsx input")
+    parser.add_argument("--input", "-i", required=True, help="Path to .pcap/.pcapng/.csv/.xlsx/.parquet input")
     parser.add_argument("--threshold", "-t", type=float, default=0.5,
                         help="Anomaly score threshold in [0,1] (default 0.5)")
     parser.add_argument("--output", "-o", default=None, help="Optional path to write full JSON report")
