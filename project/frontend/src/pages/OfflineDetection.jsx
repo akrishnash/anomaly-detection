@@ -22,6 +22,23 @@ function formatBytes(bytes) {
   return `${b} B`;
 }
 
+// Plain-language explanations of attack types for the non-expert summary panel
+function describeAttack(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('amplification')) return 'Attackers tricked other servers into flooding this network with huge reply messages.';
+  if (n.includes('syn flood')) return 'The target was flooded with fake connection requests that are never completed, tying up its capacity.';
+  if (n.includes('udp flood')) return 'The target was bombarded with a massive stream of junk data packets.';
+  if (n.includes('icmp')) return 'The target was overwhelmed with a flood of ping messages.';
+  if (n.includes('slowloris')) return 'Many web connections were held open at a trickle to slowly exhaust the web server.';
+  if (n.includes('http flood')) return 'The web server was overwhelmed with an abnormally large number of page requests.';
+  if (n.includes('brute force')) return 'Repeated login attempts were made, trying to guess valid credentials.';
+  if (n.includes('exfiltration')) return 'A large amount of data was sent out one-way — possibly stolen information leaving the network.';
+  if (n.includes('volumetric')) return 'A sheer volume of traffic was aimed at overwhelming the network connection.';
+  if (n.includes('port scan') || n.includes('recon')) return 'Someone probed the network looking for open doors (ports) — usually the step before an attack.';
+  if (n.startsWith('ddos')) return 'A coordinated flood of traffic from many sources at once, aimed at taking the target down.';
+  return 'This traffic behaves very differently from normal activity, but does not match a known attack pattern.';
+}
+
 function SeverityBadge({ severity }) {
   const color = SEVERITY_COLORS[severity] || '#9ca3af';
   return (
@@ -241,6 +258,73 @@ export default function OfflineDetection({ addToast }) {
           {/* Results Summary Overview */}
           {results && (
             <div className="space-y-6 animate-scanline-pane">
+              {/* ── PLAIN-LANGUAGE SUMMARY (for non-expert users) ── */}
+              <div className={`border rounded-2xl p-6 shadow-xl space-y-5 ${
+                results.anomalies_count > 0
+                  ? 'bg-cyber-red/5 border-cyber-red/40'
+                  : 'bg-cyber-green/5 border-cyber-green/40'
+              }`}>
+                {/* Verdict banner */}
+                <div className="flex items-start space-x-4">
+                  {results.anomalies_count > 0 ? (
+                    <ShieldAlert className="w-12 h-12 text-cyber-red shrink-0" />
+                  ) : (
+                    <ShieldCheck className="w-12 h-12 text-cyber-green shrink-0" />
+                  )}
+                  <div>
+                    <div className={`text-2xl font-bold ${results.anomalies_count > 0 ? 'text-cyber-red' : 'text-cyber-green'}`}>
+                      {results.anomalies_count > 0 ? 'Attacks detected in this traffic' : 'No attacks detected'}
+                    </div>
+                    <p className="text-sm text-gray-300 mt-1 leading-relaxed">
+                      {results.anomalies_count > 0 ? (
+                        <>We analyzed <span className="text-white font-bold">{results.total_flows.toLocaleString()}</span> traffic
+                        flows. <span className="text-cyber-red font-bold">{results.anomalies_count.toLocaleString()}</span> of
+                        them ({results.threat_ratio}%) look like attacks, and{' '}
+                        <span className="text-cyber-green font-bold">{results.normal_count.toLocaleString()}</span> look like
+                        normal traffic. The attacks found are listed below — click one to see exactly which flows are affected.</>
+                      ) : (
+                        <>We analyzed <span className="text-white font-bold">{results.total_flows.toLocaleString()}</span> traffic
+                        flows and all of them look like normal, everyday network activity.</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* One card per attack type: what, how many, which rows */}
+                {results.attack_details && results.attack_details.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {results.attack_details.map((d) => (
+                      <button
+                        key={`plain-${d.name}`}
+                        onClick={() => handleAttackFilter(d.name)}
+                        className={`text-left border rounded-xl p-4 space-y-2 transition-all duration-200 cursor-pointer ${
+                          attackFilter === d.name
+                            ? 'border-cyber-cyan bg-cyber-cyan/10'
+                            : 'border-cyber-border bg-cyber-dark/60 hover:border-cyber-red/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-white font-bold text-sm">{d.name}</span>
+                          <span className="px-2.5 py-1 rounded-full bg-cyber-red/15 border border-cyber-red/30 text-cyber-red font-bold text-xs whitespace-nowrap">
+                            {d.flows.toLocaleString()} {d.flows === 1 ? 'flow' : 'flows'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 leading-relaxed">{describeAttack(d.name)}</p>
+                        {d.row_numbers && d.row_numbers.length > 0 && (
+                          <div className="pt-1.5 border-t border-cyber-border/40">
+                            <span className="text-[10px] text-gray-500 uppercase font-mono">Found in {fileMeta?.extension?.startsWith('.pcap') ? 'flows' : 'file rows'}: </span>
+                            <span className="text-[11px] text-cyber-cyan font-mono">
+                              {d.row_numbers.slice(0, 12).join(', ')}
+                              {d.flows > 12 && ` … and ${(d.flows - 12).toLocaleString()} more`}
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Prediction metrics overview */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-cyber-card border border-cyber-border rounded-xl p-4 text-center font-mono">

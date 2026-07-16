@@ -129,8 +129,13 @@ def classify_flow(flow: dict) -> dict:
     # port-based rule above can never fire. Reflection floods still carry the
     # size signature (amplified responses >> request size); without a port we
     # can assert "amplification" but not name the abused service.
+    # Fires on either profile: fast reflected traffic, OR slow-per-flow floods
+    # (e.g. TFTP: ~4 oversized packets over seconds, strictly one-way - the
+    # campaign is many flows, not fast flows).
     ports_unknown = src_port == 0 and dst_port == 0
-    if proto == "UDP" and ports_unknown and mean_len > 400 and oneway > 0.8 and (pps > 10 or bps > 100000):
+    slow_reflected = oneway >= 0.95 and pkts >= 3
+    if proto == "UDP" and ports_unknown and mean_len > 400 and oneway > 0.8 and \
+            (pps > 10 or bps > 100000 or slow_reflected):
         evidence = [
             f"oversized UDP packets (mean {mean_len:.0f} B) in one-way traffic (reflection signature)",
             f"traffic rate {bps:.0f} B/s",

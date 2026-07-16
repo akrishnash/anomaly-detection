@@ -484,8 +484,10 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
                 "target_counter": {},
                 "dst_ports": set(),
                 "protocols": set(),
-                "example_evidence": []
+                "example_evidence": [],
+                "rows": []
             })
+            d["rows"].append(item.get("file_row_number"))
             d["flows"] += 1
             d["total_pkts"] += int(fd.get("total_pkts", 0))
             d["total_bytes"] += float(fd.get("fwd_bytes", 0.0)) + float(fd.get("bwd_bytes", 0.0))
@@ -524,7 +526,10 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
                                 sorted(d["target_counter"].items(), key=lambda x: -x[1])[:5]],
                 "unique_sources": len(d["src_counter"]),
                 "dst_ports": sorted(d["dst_ports"])[:20],
-                "example_evidence": d["example_evidence"]
+                "example_evidence": d["example_evidence"],
+                # Affected file rows/flows for the plain-language summary panel
+                # (anomalies payload is capped at 50, so row pointers ride here)
+                "row_numbers": sorted(r for r in d["rows"] if r is not None)[:40]
             })
 
         severities = [

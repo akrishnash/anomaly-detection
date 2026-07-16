@@ -1,0 +1,256 @@
+{
+  "dataset": "main_dataset.csv (all CICDDoS2019 testing parquets joined)",
+  "rows": 306201,
+  "threshold": 0.5,
+  "stage1_binary": {
+    "accuracy": 0.8806600892877554,
+    "precision": 0.9963341474618747,
+    "recall": 0.8597471712775269,
+    "f1": 0.9230150169382975
+  },
+  "stage2_segregation_accuracy_among_detected": 0.9967315040102985,
+  "per_label": {
+    "Benign": {
+      "flows": 51404,
+      "detected": 806,
+      "detection_rate": 0.015679713640961792,
+      "dominant_verdict": "Unknown Anomaly",
+      "expected_family": null,
+      "family_match_rate_among_detected": null,
+      "verdict_breakdown": {
+        "Unknown Anomaly": 683,
+        "SYN Flood": 51,
+        "Data Exfiltration": 46,
+        "Volumetric Flood": 26
+      }
+    },
+    "DrDoS_DNS": {
+      "flows": 3669,
+      "detected": 2546,
+      "detection_rate": 0.693922049604797,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 0.9996072270227808,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 2545,
+        "Unknown Anomaly": 1
+      }
+    },
+    "DrDoS_LDAP": {
+      "flows": 1440,
+      "detected": 1431,
+      "detection_rate": 0.99375,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 1.0,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 1431
+      }
+    },
+    "DrDoS_MSSQL": {
+      "flows": 6212,
+      "detected": 2508,
+      "detection_rate": 0.40373470701867353,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 1.0,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 2508
+      }
+    },
+    "DrDoS_NTP": {
+      "flows": 121368,
+      "detected": 110924,
+      "detection_rate": 0.9139476633049898,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 0.9995762864664094,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 110877,
+        "UDP Flood": 45,
+        "SYN Flood": 1,
+        "Volumetric Flood": 1
+      }
+    },
+    "DrDoS_NetBIOS": {
+      "flows": 598,
+      "detected": 72,
+      "detection_rate": 0.12040133779264214,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 0.8472222222222222,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 61,
+        "Unknown Anomaly": 11
+      }
+    },
+    "DrDoS_SNMP": {
+      "flows": 2717,
+      "detected": 2607,
+      "detection_rate": 0.9595141700404858,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 1.0,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 2607
+      }
+    },
+    "DrDoS_UDP": {
+      "flows": 10420,
+      "detected": 638,
+      "detection_rate": 0.06122840690978887,
+      "dominant_verdict": "Unknown Anomaly",
+      "expected_family": "UDP Flood",
+      "family_match_rate_among_detected": 0.18181818181818182,
+      "verdict_breakdown": {
+        "Unknown Anomaly": 423,
+        "UDP Flood": 116,
+        "Amplification Attack (unknown service)": 99
+      }
+    },
+    "Syn": {
+      "flows": 533,
+      "detected": 0,
+      "detection_rate": 0.0,
+      "dominant_verdict": "-",
+      "expected_family": "SYN Flood",
+      "family_match_rate_among_detected": 0.0,
+      "verdict_breakdown": {}
+    },
+    "TFTP": {
+      "flows": 98917,
+      "detected": 98215,
+      "detection_rate": 0.9929031410172164,
+      "dominant_verdict": "Amplification Attack (unknown service)",
+      "expected_family": "Amplification",
+      "family_match_rate_among_detected": 0.9998167286056101,
+      "verdict_breakdown": {
+        "Amplification Attack (unknown service)": 98197,
+        "Unknown Anomaly": 18
+      }
+    },
+    "UDP-lag": {
+      "flows": 8872,
+      "detected": 120,
+      "detection_rate": 0.013525698827772768,
+      "dominant_verdict": "Unknown Anomaly",
+      "expected_family": "UDP Flood",
+      "family_match_rate_among_detected": 0.025,
+      "verdict_breakdown": {
+        "Unknown Anomaly": 72,
+        "Amplification Attack (unknown service)": 42,
+        "UDP Flood": 3,
+        "SYN Flood": 3
+      }
+    },
+    "WebDDoS": {
+      "flows": 51,
+      "detected": 0,
+      "detection_rate": 0.0,
+      "dominant_verdict": "-",
+      "expected_family": "HTTP Flood",
+      "family_match_rate_among_detected": 0.0,
+      "verdict_breakdown": {}
+    }
+  },
+  "crosstab": {
+    "Amplification Attack (unknown service)": {
+      "Benign": 0,
+      "DrDoS_DNS": 2545,
+      "DrDoS_LDAP": 1431,
+      "DrDoS_MSSQL": 2508,
+      "DrDoS_NTP": 110877,
+      "DrDoS_NetBIOS": 61,
+      "DrDoS_SNMP": 2607,
+      "DrDoS_UDP": 99,
+      "Syn": 0,
+      "TFTP": 98197,
+      "UDP-lag": 42,
+      "WebDDoS": 0
+    },
+    "Data Exfiltration": {
+      "Benign": 46,
+      "DrDoS_DNS": 0,
+      "DrDoS_LDAP": 0,
+      "DrDoS_MSSQL": 0,
+      "DrDoS_NTP": 0,
+      "DrDoS_NetBIOS": 0,
+      "DrDoS_SNMP": 0,
+      "DrDoS_UDP": 0,
+      "Syn": 0,
+      "TFTP": 0,
+      "UDP-lag": 0,
+      "WebDDoS": 0
+    },
+    "Normal": {
+      "Benign": 50598,
+      "DrDoS_DNS": 1123,
+      "DrDoS_LDAP": 9,
+      "DrDoS_MSSQL": 3704,
+      "DrDoS_NTP": 10444,
+      "DrDoS_NetBIOS": 526,
+      "DrDoS_SNMP": 110,
+      "DrDoS_UDP": 9782,
+      "Syn": 533,
+      "TFTP": 702,
+      "UDP-lag": 8752,
+      "WebDDoS": 51
+    },
+    "SYN Flood": {
+      "Benign": 51,
+      "DrDoS_DNS": 0,
+      "DrDoS_LDAP": 0,
+      "DrDoS_MSSQL": 0,
+      "DrDoS_NTP": 1,
+      "DrDoS_NetBIOS": 0,
+      "DrDoS_SNMP": 0,
+      "DrDoS_UDP": 0,
+      "Syn": 0,
+      "TFTP": 0,
+      "UDP-lag": 3,
+      "WebDDoS": 0
+    },
+    "UDP Flood": {
+      "Benign": 0,
+      "DrDoS_DNS": 0,
+      "DrDoS_LDAP": 0,
+      "DrDoS_MSSQL": 0,
+      "DrDoS_NTP": 45,
+      "DrDoS_NetBIOS": 0,
+      "DrDoS_SNMP": 0,
+      "DrDoS_UDP": 116,
+      "Syn": 0,
+      "TFTP": 0,
+      "UDP-lag": 3,
+      "WebDDoS": 0
+    },
+    "Unknown Anomaly": {
+      "Benign": 683,
+      "DrDoS_DNS": 1,
+      "DrDoS_LDAP": 0,
+      "DrDoS_MSSQL": 0,
+      "DrDoS_NTP": 0,
+      "DrDoS_NetBIOS": 11,
+      "DrDoS_SNMP": 0,
+      "DrDoS_UDP": 423,
+      "Syn": 0,
+      "TFTP": 18,
+      "UDP-lag": 72,
+      "WebDDoS": 0
+    },
+    "Volumetric Flood": {
+      "Benign": 26,
+      "DrDoS_DNS": 0,
+      "DrDoS_LDAP": 0,
+      "DrDoS_MSSQL": 0,
+      "DrDoS_NTP": 1,
+      "DrDoS_NetBIOS": 0,
+      "DrDoS_SNMP": 0,
+      "DrDoS_UDP": 0,
+      "Syn": 0,
+      "TFTP": 0,
+      "UDP-lag": 0,
+      "WebDDoS": 0
+    }
+  }
+}
