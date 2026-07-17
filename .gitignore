@@ -17,6 +17,13 @@ project/frontend/dist/
 data/ctu13/
 data/CICDDos2019/
 
+# Local baseline captures + derived flow CSVs (machine-specific; see docs/LOCAL_BASELINE_DATASET_PLAN.md)
+data/baseline_train/
+data/local_baseline/
+
+# Model backup (previous CICDDoS models also live in git history)
+project/models_backup_cicddos/
+
 # Runtime state (created automatically by the apps)
 temp_uploads/
 project/logs/

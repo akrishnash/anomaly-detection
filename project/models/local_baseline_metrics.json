@@ -1,0 +1,24 @@
+{
+  "baseline": "local",
+  "threshold": 0.5,
+  "train_flows": 15018,
+  "contamination": 0.01,
+  "attack_ref": "E:\\Projects Internet room\\anamoly_detection\\data\\CICDDos2019",
+  "calibration": {
+    "if": {
+      "lo": 0.4705962967264794,
+      "mid": 0.6364977468879193,
+      "hi": 0.8024001970493592
+    },
+    "ae": {
+      "lo": 0.036806142382207224,
+      "mid": 0.6934292106155715,
+      "hi": 1.3500532788489357
+    }
+  },
+  "train_fp_rate": 0.01851111998934612,
+  "val_flows": 3754,
+  "val_fp_rate": 0.013851891315929675,
+  "attack_ref_flows": 78743,
+  "attack_ref_recall": 0.026592839998476055
+}

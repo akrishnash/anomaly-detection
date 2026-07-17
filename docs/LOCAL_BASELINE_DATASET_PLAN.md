@@ -195,8 +195,10 @@ Current live settings that inflate false positives (Settings page or `/api/setti
 
 ## Deliverables checklist
 
-- [ ] Phase 1 pcap sessions captured (≥ 4 h, ≥ 2 days, includes idle session)
-- [ ] `project/backend/pcap_to_flows.py` written (30 s windowing, reuses flow_generator + feature_extractor)
-- [ ] `benign_train.csv` / `benign_val.csv` produced and audited
-- [ ] `project/backend/train_local_baseline.py` written; old models backed up
-- [ ] All three Phase 5 validation checks pass
+> Executed 2026-07-17 on capture batch 1 — results in `docs/LOCAL_BASELINE_RESULTS.md`.
+
+- [ ] Phase 1 pcap sessions captured (≥ 4 h, ≥ 2 days, includes idle session) — **partial: ~58 min, 1 day (batch 1 in `data/baseline_train/wireshark_data/`)**
+- [x] `project/backend/pcap_to_flows.py` written (30 s windowing, reuses flow_generator + feature_extractor)
+- [x] `benign_train.csv` / `benign_val.csv` produced and audited (18,772 flows; nothing suspicious found)
+- [x] `project/backend/train_local_baseline.py` written; old models backed up to `project/models_backup_cicddos/`
+- [ ] All three Phase 5 validation checks pass — **FP rate 1.39% PASS; in-domain attack detection PASS (synthetic; CICDDoS cross-domain is informational); live sanity check pending**

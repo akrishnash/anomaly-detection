@@ -1,6 +1,6 @@
 # Project Progress — Network Anomaly Detection
 
-Last updated: 2026-07-16 (see "Session Log — 2026-07-16" and "Next Session Starting Point" at the bottom; sections between were written 2026-06-24 and are partially superseded by theory.md / the paper / docs/CICDDOS2019_RESULTS.md)
+Last updated: 2026-07-17 (see "Session Log — 2026-07-17" and "Next Session Starting Point" at the bottom; sections between were written 2026-06-24 and are partially superseded by theory.md / the paper / docs/CICDDOS2019_RESULTS.md)
 
 ---
 
@@ -253,9 +253,53 @@ summary so the next session can pick up without re-deriving context.
 
 ---
 
+## Session Log — 2026-07-17 (branch `anurag`)
+
+Full numbers live in **`docs/LOCAL_BASELINE_RESULTS.md`**. Executed the local
+baseline plan (`docs/LOCAL_BASELINE_DATASET_PLAN.md`) on the user's first
+capture batch — **`project/models/` now holds LOCAL-baseline models**; the
+CICDDoS2019 models are backed up in `project/models_backup_cicddos/`.
+
+1. **Capture batch 1** (user): `data/baseline_train/wireshark_data/` —
+   capture1 (359 k pkts, ~19 min, truncated mid-packet, handled) + capture2
+   (876 k pkts, ~39 min, incl. streaming). ~58 min total — short of the 4–8 h /
+   ≥2-day plan target; iteration 2 needs idle + different-day sessions.
+2. **New `project/backend/pcap_to_flows.py`**: streams pcapng (PcapReader, L4-only
+   dissection ~3.3 k pkt/s), fixed 30 s windowing BEFORE flow grouping (matches
+   live sliding window), reuses flow_generator + feature_extractor →
+   `data/local_baseline/csv/benign_flows.csv` (18,772 flows, 119 windows).
+3. **Audit with old models**: they flag **35.7%** of local benign at 0.5 —
+   the domain-shift FP problem, quantified. Top scorers = streaming/QUIC/
+   WUDO-7680/LDAP office chatter; nothing suspicious, nothing removed.
+   Split 15,018 train / 3,754 val.
+4. **New `project/backend/train_local_baseline.py`**: scaler + IF
+   (contamination 0.01) + AE all on local benign; anchors lo=median,
+   mid=q99 benign. **Finding: CICDDoS attack-ref median raw score < local benign
+   q99 on both heads** → `hi` falls back to benign extrapolation
+   (`mid + (mid−lo)`), printed explicitly. Cross-domain CSV attacks cannot
+   anchor an in-domain pipeline.
+5. **Validation**: benign val FP **1.39%** (PASS <2–5%); in-domain synthetic
+   attack shapes (UDP/SYN floods, amplification, scan burst, exfil) all ALERT,
+   benign controls 0.07/0.00 (PASS); CICDDoS testing split macro ~37%, family
+   set FLIPPED vs before (Syn/WebDDoS now visible; NTP/TFTP now invisible) —
+   representation-ceiling consequence, informational not a gate.
+6. **Settings DB fixed**: threshold 0.85→0.5, context_window 13→30.
+   Interface setting still "Wifi" — pick Ethernet 5 in the UI.
+7. **Pending user steps**: restart backend; 10-min live browse sanity
+   (expect ≈0–2%); optional nmap drill from another machine; capture more
+   sessions and rerun Phases 2–4.
+
+---
+
 ## Next Session Starting Point
 
-**Agreed next task: the feature-ceiling experiment** — compute per-class KS
+**First: finish local-baseline validation** — restart backend, run the 10-min
+live browse sanity check on Ethernet 5 (expect ≈0–2% detection), optionally the
+LAN nmap drill; then capture idle + different-day sessions and rerun
+`pcap_to_flows.py` → audit → `train_local_baseline.py` (commands in
+`docs/LOCAL_BASELINE_RESULTS.md`).
+
+**Then the feature-ceiling experiment (carried over)** — compute per-class KS
 (ceiling = max achievable Youden J, per Thm 1) for each candidate feature /
 feature-tier on the CICDDoS2019 77-column space vs the current 10-column space.
 This quantifies, before any training, how much recall on Syn / UDP-lag /
