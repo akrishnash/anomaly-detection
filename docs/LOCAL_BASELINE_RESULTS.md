@@ -93,6 +93,42 @@ UI for live validation.
 4. Capture more sessions (idle + different day) and rerun Phases 2–4 to reach
    the ≥50 k-flow / ≥2-day target.
 
+## Live validation drill (2026-07-17)
+
+Ran the live pipeline on Ethernet 5 with the retrained models and simulated
+attacks from a second terminal (`project/backend/flood_sim.py`, L2 `sendp` with
+an inert fake dst MAC so frames hit the wire and our own sniffer but no real
+host processes them).
+
+- **Model-freshness gotcha:** the long-running backend had the OLD CICDDoS
+  models cached in memory and flagged **42%** of benign traffic; `reload=True`
+  did NOT pick up the new pickles. A full backend restart was required — after
+  it, benign dropped to **0–4%** (live sanity check **PASS**).
+- **Single-source SYN flood** (185.220.101.50 -> 192.168.1.123:80, ~600 pps):
+  the flow scored ensemble **1.0**, classified **SYN Flood / Critical**, in one
+  30 s window.
+- **Distributed SYN flood** (12 sources): campaign aggregation produced
+  **`DDoS: SYN Flood (distributed: 12 sources)`**, source entropy 1.0, Critical.
+
+Three findings worth fixing/knowing:
+
+1. **Stage 2 SYN-flood false positive.** `ddos_classifier.classify_flow`
+   (~line 100) fires on `syn >= 1` with no volume floor, so a benign
+   connection-opening SYN split across the 30 s window boundary (a 1-packet,
+   SYN-only flow) is mislabeled "SYN Flood". These 1-packet SYN flows are also
+   what Stage 1 flags as anomalous (rare in the baseline = window-edge artifact).
+   Suggested fix: require volume, e.g. `syn >= 20 or (syn >= 5 and pps > 20)`.
+2. **Distributed campaigns need attacker IPs that sort BELOW the victim.**
+   `flow_generator` keys flows by the lexicographically-smaller IP, and
+   `aggregate_campaigns` groups by the larger ("dst") IP. Spoofed sources that
+   sort above the victim (e.g. `45.x` vs `192.168.1.123`) make the victim the
+   "source" side, fragmenting one distributed attack into N single-source
+   campaigns. `flood_sim.py` picks sources that sort below the victim.
+3. **Capture drops on reload.** `run_all.py` runs uvicorn with `reload=True`
+   watching the repo root, so any file change gracefully restarts the backend
+   and kills the capture thread mid-run. Run the backend without `--reload` for
+   longer live sessions.
+
 ## Rollback
 
 ```powershell

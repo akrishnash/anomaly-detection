@@ -289,6 +289,23 @@ CICDDoS2019 models are backed up in `project/models_backup_cicddos/`.
    (expect ≈0–2%); optional nmap drill from another machine; capture more
    sessions and rerun Phases 2–4.
 
+## Live-attack drill — 2026-07-17 (branch `anurag`)
+
+Validated the retrained local-baseline models end-to-end on the live UI and
+added `project/backend/flood_sim.py` (attack simulator: syn/udp/icmp/ampl/ddos/
+scan modes; L2 `sendp` on Ethernet 5, inert fake dst MAC, fixed 5-tuple per
+source so flows aggregate). Full write-up in `docs/LOCAL_BASELINE_RESULTS.md`
+("Live validation drill").
+
+- Live sanity check **PASS**: benign 0–4% on Ethernet 5 (was 42% until the
+  backend was restarted — `reload=True` kept the OLD cached models in memory).
+- Single SYN flood -> ensemble 1.0, "SYN Flood" Critical; distributed 12-source
+  flood -> "DDoS: SYN Flood (distributed: 12 sources)", entropy 1.0.
+- Bugs found (see results doc): (1) Stage 2 SYN-flood rule has no volume floor
+  -> benign lone-SYN window-edge flows mislabeled "SYN Flood" (the FP the user
+  saw); (2) distributed campaigns need attacker IPs sorting BELOW the victim
+  (flow_generator sorted-IP keying); (3) capture thread drops on uvicorn reload.
+
 ---
 
 ## Next Session Starting Point

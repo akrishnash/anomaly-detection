@@ -201,4 +201,4 @@ Current live settings that inflate false positives (Settings page or `/api/setti
 - [x] `project/backend/pcap_to_flows.py` written (30 s windowing, reuses flow_generator + feature_extractor)
 - [x] `benign_train.csv` / `benign_val.csv` produced and audited (18,772 flows; nothing suspicious found)
 - [x] `project/backend/train_local_baseline.py` written; old models backed up to `project/models_backup_cicddos/`
-- [ ] All three Phase 5 validation checks pass — **FP rate 1.39% PASS; in-domain attack detection PASS (synthetic; CICDDoS cross-domain is informational); live sanity check pending**
+- [x] All three Phase 5 validation checks pass — **FP rate 1.39% PASS; in-domain attack detection PASS; live sanity check PASS (benign 0–4% live on Ethernet 5, single + distributed SYN floods caught at ensemble 1.0 / Critical — see LOCAL_BASELINE_RESULTS.md "Live validation drill")**
