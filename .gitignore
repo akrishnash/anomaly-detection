@@ -23,6 +23,12 @@ data/local_baseline/
 
 # Model backup (previous CICDDoS models also live in git history)
 project/models_backup_cicddos/
+project/models_backup_*/
+
+# Raw Wireshark packet captures
+wireshark_dataset/
+*.pcap
+*.pcapng
 
 # Runtime state (created automatically by the apps)
 temp_uploads/
@@ -31,3 +37,4 @@ project/datasets/
 project/reports/
 research/results/
 *.sqlite
+

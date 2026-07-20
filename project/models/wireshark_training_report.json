@@ -1,0 +1,64 @@
+{
+  "dataset_source": "d:\\Projects\\anomaly-detection\\wireshark_dataset\\training_wireshark",
+  "number_of_pcapng_files_processed": 3,
+  "total_packets_processed": 4749832,
+  "total_30s_windows": 407,
+  "total_flows_generated": 8782,
+  "training_execution_time_seconds": 972.98,
+  "model_parameters": {
+    "isolation_forest": {
+      "n_estimators": 100,
+      "contamination": 0.01,
+      "random_state": 42
+    },
+    "autoencoder": {
+      "input_dim": 10,
+      "latent_dim": 4,
+      "activation": "relu",
+      "max_iter": 100,
+      "random_state": 42
+    }
+  },
+  "score_calibration_anchors": {
+    "if": {
+      "lo": 0.428146,
+      "mid": 0.644107,
+      "hi": 0.860068
+    },
+    "ae": {
+      "lo": 0.083929,
+      "mid": 1.144481,
+      "hi": 2.205034
+    }
+  },
+  "backup_directory": "d:\\Projects\\anomaly-detection\\project\\models_backup_20260720_232343",
+  "saved_model_locations": {
+    "scaler.pkl": "d:\\Projects\\anomaly-detection\\project\\models\\scaler.pkl",
+    "isolation_forest.pkl": "d:\\Projects\\anomaly-detection\\project\\models\\isolation_forest.pkl",
+    "autoencoder.pkl": "d:\\Projects\\anomaly-detection\\project\\models\\autoencoder.pkl",
+    "meta.pkl": "d:\\Projects\\anomaly-detection\\project\\models\\meta.pkl"
+  },
+  "feature_names": [
+    "flow_byts_s",
+    "flow_pkts_s",
+    "fwd_bytes",
+    "bwd_bytes",
+    "total_pkts",
+    "syn_flag",
+    "rst_flag",
+    "fin_flag",
+    "flow_duration_s",
+    "pkt_len_mean"
+  ],
+  "skewed_columns_transformed": [
+    "flow_byts_s",
+    "flow_pkts_s",
+    "fwd_bytes",
+    "bwd_bytes",
+    "total_pkts",
+    "syn_flag",
+    "rst_flag",
+    "fin_flag",
+    "pkt_len_mean"
+  ]
+}
