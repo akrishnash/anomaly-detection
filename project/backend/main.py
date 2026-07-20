@@ -88,4 +88,6 @@ if __name__ == "__main__":
     if not port:
         port = _pick_free_port(8000)
     print(f"[*] Backend listening on http://127.0.0.1:{port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+    # Bind all interfaces so the API is reachable via the LAN IP as well as
+    # 127.0.0.1. NOTE: exposes the API to the local network with no auth.
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

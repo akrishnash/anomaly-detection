@@ -9,10 +9,10 @@ const backendPort = process.env.AEGIS_BACKEND_PORT || 8000
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Bind to the IPv4 loopback only: localhost-only (not exposed on the LAN)
-    // and matches the backend, which also binds 127.0.0.1. Avoids the
-    // localhost -> IPv6 (::1) resolution that can mismatch the IPv4 backend.
-    host: '127.0.0.1',
+    // Listen on all interfaces so the UI is reachable via the LAN IP
+    // (e.g. http://192.168.1.123:<port>) as well as 127.0.0.1/localhost.
+    // NOTE: this exposes the dashboard to the local network with no auth.
+    host: true,
     port: 5173,
     proxy: {
       '/api': {
