@@ -9,6 +9,10 @@ const backendPort = process.env.AEGIS_BACKEND_PORT || 8000
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Bind to the IPv4 loopback only: localhost-only (not exposed on the LAN)
+    // and matches the backend, which also binds 127.0.0.1. Avoids the
+    // localhost -> IPv6 (::1) resolution that can mismatch the IPv4 backend.
+    host: '127.0.0.1',
     port: 5173,
     proxy: {
       '/api': {

@@ -135,8 +135,8 @@ def main():
     
     # Give servers a few seconds to boot, then open browser
     time.sleep(4)
-    print(f"\n[+] Both servers launched. Opening browser at http://localhost:{frontend_port}...")
-    webbrowser.open(f"http://localhost:{frontend_port}")
+    print(f"\n[+] Both servers launched. Opening browser at http://127.0.0.1:{frontend_port}...")
+    webbrowser.open(f"http://127.0.0.1:{frontend_port}")
     
     print("\n[*] Orchestrator is running. Press Ctrl+C to stop both servers gracefully.\n")
     
