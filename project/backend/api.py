@@ -266,8 +266,37 @@ def start_offline_detection(file_id: str = Form(...), extension: str = Form(...)
         # Load confidence threshold from settings
         conf_thresh = float(database.get_setting("confidence_threshold", "0.5"))
         
-        # Determine anomaly flags for all rows based on user threshold
-        is_anomaly_array = (probs >= conf_thresh)
+        # Vectorized canonical lookups (per-row .iloc costs minutes on large files)
+        def _canon_col(name, default):
+            if name in df_canonical.columns:
+                return df_canonical[name].to_numpy()
+            return np.full(total_flows, default, dtype=object)
+
+        src_ip_arr = _canon_col("src_ip", "192.168.1.100")
+        dst_ip_arr = _canon_col("dst_ip", "10.0.0.1")
+        src_port_arr = _canon_col("src_port", 0)
+        dst_port_arr = _canon_col("dst_port", 0)
+        proto_arr = _canon_col("protocol", "TCP")
+
+        feat_cols = list(df_feats.columns)
+        feat_vals = df_feats.to_numpy()
+
+        def _feat_dict(i):
+            return dict(zip(feat_cols, feat_vals[i]))
+
+        # Evaluate rule engine for all flows to catch signature attacks (SYN Flood, UDP Flood, Port Scan, etc.)
+        rule_attack_flags = np.zeros(total_flows, dtype=bool)
+        for i in range(total_flows):
+            rule_input = _feat_dict(i)
+            rule_input["protocol"] = proto_arr[i]
+            rule_input["src_port"] = src_port_arr[i]
+            rule_input["dst_port"] = dst_port_arr[i]
+            v = ddos_classifier.classify_flow(rule_input)
+            if v["attack_type"] not in ["Normal", "Unknown Anomaly"] and v["confidence"] >= 0.4:
+                rule_attack_flags[i] = True
+
+        # Combine ML score and rule engine detection
+        is_anomaly_array = (probs >= conf_thresh) | rule_attack_flags
         anomaly_indices = np.where(is_anomaly_array)[0]
         
         anomaly_count = int(np.sum(is_anomaly_array))

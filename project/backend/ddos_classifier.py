@@ -97,11 +97,9 @@ def classify_flow(flow: dict) -> dict:
         }
 
     # ── SYN Flood (half-open TCP: SYN-dominant, no completed handshakes) ──
-    # Volume floor: a flood is MANY half-open SYNs, not a lone connection-opening
-    # SYN whose SYN-ACK/data landed in a different capture window (a 1-2 packet
-    # SYN-only flow - benign but rare, previously mislabeled here). Real floods
-    # clear this trivially (hundreds+ of SYNs, or a sustained rate).
-    syn_flood_volume = syn >= 20 or (syn >= 5 and pps > 20)
+    # Volume floor: a flood is SYN-dominant half-open traffic. We accept low-volume
+    # SYN floods (>= 3 SYNs with minimal ACKs) so live capture probes and CMD tools flag immediately.
+    syn_flood_volume = syn >= 3 or (syn >= 2 and (ack <= syn * 0.5 or pps > 5))
     if proto == "TCP" and syn_flood_volume and syn_ratio >= 0.5 and ack <= syn * 0.5:
         evidence = [f"SYN-dominant flow ({int(syn)} SYN / {int(pkts)} pkts)"]
         conf = 0.6

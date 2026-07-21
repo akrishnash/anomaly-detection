@@ -459,7 +459,14 @@ class PacketCaptureManager:
             top_src_ips[src_ip] = top_src_ips.get(src_ip, 0) + 1
             top_dst_ips[dst_ip] = top_dst_ips.get(dst_ip, 0) + 1
             
-            is_anomaly = bool(is_anomaly_array[i])
+            rule_input = dict(flow_info)
+            rule_input["protocol"] = proto
+            rule_input["src_port"] = df_canonical.iloc[i].get("src_port", 0)
+            rule_input["dst_port"] = dst_port
+            threat_verdict = ddos_classifier.classify_flow(rule_input)
+            
+            rule_is_attack = threat_verdict["attack_type"] not in ["Normal", "Unknown Anomaly"] and threat_verdict["confidence"] >= 0.4
+            is_anomaly = bool(is_anomaly_array[i]) or rule_is_attack
             
             if not is_anomaly:
                 normal_count += 1
@@ -469,13 +476,11 @@ class PacketCaptureManager:
                 explanation_text = "Traffic flow matched the benign baseline signature. No threat detected."
             else:
                 attack_count += 1
-                rule_input = dict(flow_info)
-                rule_input["protocol"] = proto
-                rule_input["src_port"] = df_canonical.iloc[i].get("src_port", 0)
-                rule_input["dst_port"] = dst_port
-                threat_verdict = ddos_classifier.classify_flow(rule_input)
                 threat_type = threat_verdict["attack_type"]
                 severity = threat_verdict["severity"]
+                if rule_is_attack and prob < 0.5:
+                    prob = max(prob, float(threat_verdict["confidence"]))
+                
                 shap_contrib, explanation_text = shap_results.get(i, ([], "Threat signature detected."))
                 if threat_verdict["evidence"]:
                     explanation_text += " Signature evidence: " + "; ".join(threat_verdict["evidence"]) + "."
