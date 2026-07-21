@@ -138,3 +138,28 @@ export async function getInterfaces() {
   return res.json();
 }
 
+export async function getHistoryStats(mode) {
+  const url = mode ? `${API_BASE}/api/history/stats?mode=${encodeURIComponent(mode)}` : `${API_BASE}/api/history/stats`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch history stats');
+  return res.json();
+}
+
+export function getExportUrl(type = 'json', { mode, search, prediction, protocol } = {}) {
+  const params = new URLSearchParams();
+  if (mode) params.append('mode', mode);
+  if (search) params.append('search', search);
+  if (prediction !== undefined && prediction !== '') params.append('prediction', prediction.toString());
+  if (protocol) params.append('protocol', protocol);
+  
+  let endpoint = '/api/export-csv';
+  if (type === 'json') endpoint = '/api/export-json';
+  else if (type === 'pdf') endpoint = '/api/download-pdf';
+  else if (type === 'xml') endpoint = '/api/export-xml';
+  else if (type === 'txt') endpoint = '/api/export-txt';
+  
+  const query = params.toString();
+  return `${API_BASE}${endpoint}${query ? `?${query}` : ''}`;
+}
+
+

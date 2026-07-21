@@ -266,5 +266,46 @@ class TestIDSBackend(unittest.TestCase):
         self.assertEqual(df_canonical_web.loc[0, "packets"], 0) # fallback default
         self.assertEqual(X_scaled_web.shape, (1, 10))
 
+    def test_history_stats_and_exports(self):
+        # Test get_history_stats
+        stats = database.get_history_stats()
+        self.assertIn("total_records", stats)
+        self.assertIn("first_captured", stats)
+        self.assertIn("latest_captured", stats)
+        self.assertIn("interval_seconds", stats)
+        self.assertIn("formatted_duration", stats)
+        self.assertIn("anomaly_count", stats)
+        self.assertIn("benign_count", stats)
+
+        # Test FastAPI export endpoints via TestClient
+        from api import router
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+        
+        # Test GET /api/history/stats
+        r1 = client.get("/api/history/stats")
+        self.assertEqual(r1.status_code, 200)
+        self.assertIn("formatted_duration", r1.json())
+
+        # Test GET /api/export-json
+        r2 = client.get("/api/export-json")
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(r2.headers.get("content-type", "").startswith("application/json"))
+
+        # Test GET /api/export-csv
+        r3 = client.get("/api/export-csv")
+        self.assertEqual(r3.status_code, 200)
+        self.assertTrue(r3.headers.get("content-type", "").startswith("text/csv"))
+
+        # Test GET /api/download-pdf
+        r4 = client.get("/api/download-pdf")
+        self.assertEqual(r4.status_code, 200)
+        self.assertTrue(r4.headers.get("content-type", "").startswith("application/pdf"))
+
 if __name__ == "__main__":
     unittest.main()
+

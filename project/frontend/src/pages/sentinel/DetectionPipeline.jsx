@@ -303,9 +303,14 @@ export default function DetectionPipeline({ addToast, lastRun, onRunComplete, on
             <div className="flex justify-between text-[10px] font-label-mono text-on-surface-variant">
               <span>{running ? `RUNNING · ${elapsed}s` : report ? 'ANALYSIS COMPLETE' : 'IDLE'}</span>
               {report && (
-                <button onClick={() => onNavigate('explorer')} className="text-primary-container hover:underline cursor-pointer uppercase">
-                  Inspect flows in explorer →
-                </button>
+                <div className="flex gap-4">
+                  <button onClick={() => onNavigate('explorer')} className="text-primary-container hover:underline cursor-pointer uppercase">
+                    Inspect flows in explorer →
+                  </button>
+                  <button onClick={() => onNavigate('history')} className="text-primary hover:underline cursor-pointer uppercase font-bold">
+                    View Intelligence History →
+                  </button>
+                </div>
               )}
             </div>
           </div>

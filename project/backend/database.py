@@ -287,3 +287,83 @@ def get_history(search=None, mode=None, prediction=None, protocol=None, limit=10
         results.append(r)
         
     return results, total_count
+
+def get_history_stats(mode=None):
+    """
+    Computes capturing time interval (start, end, duration) and statistical summary 
+    for history data. Optional mode filter ('Online', 'Offline', etc.).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    where_clause = ""
+    params = []
+    if mode:
+        where_clause = " WHERE mode = ?"
+        params.append(mode)
+        
+    query = f"""
+    SELECT 
+        COUNT(*) as total_records,
+        MIN(timestamp) as first_captured,
+        MAX(timestamp) as latest_captured,
+        SUM(CASE WHEN prediction = 1 THEN 1 ELSE 0 END) as anomaly_count,
+        SUM(CASE WHEN prediction = 0 THEN 1 ELSE 0 END) as benign_count,
+        SUM(CASE WHEN mode = 'Online' THEN 1 ELSE 0 END) as online_count,
+        SUM(CASE WHEN mode = 'Offline' THEN 1 ELSE 0 END) as offline_count
+    FROM history {where_clause}
+    """
+    cursor.execute(query, params)
+    row = cursor.fetchone()
+    conn.close()
+    
+    total_records = row["total_records"] if row else 0
+    first_captured = row["first_captured"] if row and row["first_captured"] else None
+    latest_captured = row["latest_captured"] if row and row["latest_captured"] else None
+    anomaly_count = row["anomaly_count"] if row and row["anomaly_count"] is not None else 0
+    benign_count = row["benign_count"] if row and row["benign_count"] is not None else 0
+    online_count = row["online_count"] if row and row["online_count"] is not None else 0
+    offline_count = row["offline_count"] if row and row["offline_count"] is not None else 0
+    
+    interval_seconds = 0
+    formatted_duration = "N/A"
+    
+    if first_captured and latest_captured:
+        try:
+            from datetime import datetime
+            fmt = "%Y-%m-%d %H:%M:%S"
+            t1 = datetime.strptime(first_captured, fmt)
+            t2 = datetime.strptime(latest_captured, fmt)
+            delta = t2 - t1
+            interval_seconds = max(int(delta.total_seconds()), 0)
+            
+            hours, remainder = divmod(interval_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            days, hours = divmod(hours, 24)
+            
+            parts = []
+            if days > 0:
+                parts.append(f"{days}d")
+            if hours > 0:
+                parts.append(f"{hours}h")
+            if minutes > 0 or (days == 0 and hours == 0 and seconds == 0):
+                parts.append(f"{minutes}m")
+            if seconds > 0 or len(parts) == 0:
+                parts.append(f"{seconds}s")
+            
+            formatted_duration = " ".join(parts)
+        except Exception:
+            formatted_duration = "N/A"
+            
+    return {
+        "total_records": total_records,
+        "first_captured": first_captured or "N/A",
+        "latest_captured": latest_captured or "N/A",
+        "interval_seconds": interval_seconds,
+        "formatted_duration": formatted_duration,
+        "anomaly_count": anomaly_count,
+        "benign_count": benign_count,
+        "online_count": online_count,
+        "offline_count": offline_count
+    }
+

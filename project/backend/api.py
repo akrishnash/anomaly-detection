@@ -920,43 +920,147 @@ def get_shap_explanation(history_id: int):
         "attack_type": attack_type
     })
 
-@router.get("/export-csv")
-def export_csv():
+@router.get("/history/stats")
+def get_history_stats(mode: Optional[str] = None):
+    try:
+        stats = database.get_history_stats(mode=mode)
+        stats["is_running"] = capture_manager.is_running
+        stats["sliding_window_sec"] = capture_manager.sliding_window_sec
+        return JSONResponse(content=stats)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export-json")
+def export_json(
+    mode: Optional[str] = None,
+    search: Optional[str] = None,
+    prediction: Optional[int] = None,
+    protocol: Optional[str] = None
+):
     try:
         conn = database.get_db_connection()
-        df = pd.read_sql_query("SELECT id, timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score FROM history", conn)
+        query = "SELECT id, timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score FROM history WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (src_ip LIKE ? OR dst_ip LIKE ? OR attack_type LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if prediction is not None:
+            query += " AND prediction = ?"
+            params.append(prediction)
+        if protocol:
+            query += " AND protocol = ?"
+            params.append(protocol)
+            
+        query += " ORDER BY id DESC"
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        
+        json_data = df.to_json(orient="records", indent=2)
+        filename = f"ids_captured_history_{mode.lower() if mode else 'all'}.json"
+        
+        response = StreamingResponse(iter([json_data]), media_type="application/json")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export-csv")
+def export_csv(
+    mode: Optional[str] = None,
+    search: Optional[str] = None,
+    prediction: Optional[int] = None,
+    protocol: Optional[str] = None
+):
+    try:
+        conn = database.get_db_connection()
+        query = "SELECT id, timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score FROM history WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (src_ip LIKE ? OR dst_ip LIKE ? OR attack_type LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if prediction is not None:
+            query += " AND prediction = ?"
+            params.append(prediction)
+        if protocol:
+            query += " AND protocol = ?"
+            params.append(protocol)
+            
+        query += " ORDER BY id DESC"
+        
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         
         csv_data = df.to_csv(index=False)
+        filename = f"ids_captured_history_{mode.lower() if mode else 'all'}.csv"
         
         response = StreamingResponse(iter([csv_data]), media_type="text/csv")
-        response.headers["Content-Disposition"] = "attachment; filename=ids_predictions_export.csv"
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download-pdf")
-def export_pdf():
+def export_pdf(
+    mode: Optional[str] = None,
+    search: Optional[str] = None,
+    prediction: Optional[int] = None,
+    protocol: Optional[str] = None
+):
     try:
         from fpdf import FPDF
         
+        stats = database.get_history_stats(mode=mode)
+        
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, timestamp, mode, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type FROM history ORDER BY id DESC LIMIT 50")
+        query = "SELECT id, timestamp, mode, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type FROM history WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (src_ip LIKE ? OR dst_ip LIKE ? OR attack_type LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if prediction is not None:
+            query += " AND prediction = ?"
+            params.append(prediction)
+        if protocol:
+            query += " AND protocol = ?"
+            params.append(protocol)
+            
+        query += " ORDER BY id DESC LIMIT 100"
+        
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
+        
+        interval_text = f"Interval: {stats['first_captured']} to {stats['latest_captured']} ({stats['formatted_duration']})" if stats['total_records'] > 0 else "Interval: No data captured"
         
         class IDSPDFReport(FPDF):
             def header(self):
                 self.set_fill_color(30, 41, 59) # Slate color
-                self.rect(0, 0, 210, 35, "F")
+                self.rect(0, 0, 210, 36, "F")
                 self.set_text_color(6, 182, 212) # Cyan
-                self.set_font("Arial", "B", 16)
-                self.cell(0, 10, "CYBERSECURITY IDS INCIDENT HISTORY REPORT", 0, 1, "C")
-                self.set_font("Arial", "", 9)
+                self.set_font("Arial", "B", 14)
+                self.cell(0, 8, "CYBERSECURITY IDS INCIDENT & LIVE CAPTURE HISTORY REPORT", 0, 1, "C")
+                self.set_font("Arial", "", 8)
                 self.set_text_color(255, 255, 255)
-                self.cell(0, 5, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Target: Top 50 Incidents", 0, 1, "C")
-                self.ln(12)
+                self.cell(0, 5, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Target: {mode or 'All Modes'} | Records: {len(rows)}", 0, 1, "C")
+                self.cell(0, 5, interval_text, 0, 1, "C")
+                self.ln(8)
                 
             def footer(self):
                 self.set_y(-15)
@@ -1006,12 +1110,123 @@ def export_pdf():
         pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
         pdf.output(pdf_path)
         
-        return FileResponse(pdf_path, filename="Cybersecurity_IDS_Report.pdf", media_type="application/pdf")
+        return FileResponse(pdf_path, filename=f"ids_captured_report_{mode.lower() if mode else 'all'}.pdf", media_type="application/pdf")
     except Exception as e:
         database.add_log("ERROR", f"PDF generation error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export-xml")
+def export_xml(
+    mode: Optional[str] = None,
+    search: Optional[str] = None,
+    prediction: Optional[int] = None,
+    protocol: Optional[str] = None
+):
+    try:
+        conn = database.get_db_connection()
+        query = "SELECT id, timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type, if_score, ensemble_score FROM history WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (src_ip LIKE ? OR dst_ip LIKE ? OR attack_type LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if prediction is not None:
+            query += " AND prediction = ?"
+            params.append(prediction)
+        if protocol:
+            query += " AND protocol = ?"
+            params.append(protocol)
+            
+        query += " ORDER BY id DESC"
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        
+        xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<live_captured_history>']
+        for _, row in df.iterrows():
+            xml_lines.append("  <flow_record>")
+            for col, val in row.items():
+                xml_lines.append(f"    <{col}>{val if pd.notna(val) else ''}</{col}>")
+            xml_lines.append("  </flow_record>")
+        xml_lines.append("</live_captured_history>")
+        
+        xml_data = "\n".join(xml_lines)
+        filename = f"ids_captured_history_{mode.lower() if mode else 'all'}.xml"
+        
+        response = StreamingResponse(iter([xml_data]), media_type="application/xml")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export-txt")
+def export_txt(
+    mode: Optional[str] = None,
+    search: Optional[str] = None,
+    prediction: Optional[int] = None,
+    protocol: Optional[str] = None
+):
+    try:
+        conn = database.get_db_connection()
+        query = "SELECT id, timestamp, mode, file_row_number, src_ip, dst_ip, protocol, dst_port, prediction, confidence, attack_type FROM history WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (src_ip LIKE ? OR dst_ip LIKE ? OR attack_type LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if prediction is not None:
+            query += " AND prediction = ?"
+            params.append(prediction)
+        if protocol:
+            query += " AND protocol = ?"
+            params.append(protocol)
+            
+        query += " ORDER BY id DESC"
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        
+        stats = database.get_history_stats(mode=mode)
+        
+        header = [
+            "================================================================================",
+            "              CYBERSECURITY IDS LIVE CAPTURED DATA HISTORY DIGEST               ",
+            "================================================================================",
+            f"Generated At      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Mode Filter       : {mode or 'ALL'}",
+            f"Captured Interval : {stats.get('first_captured', 'N/A')} to {stats.get('latest_captured', 'N/A')}",
+            f"Interval Duration : {stats.get('formatted_duration', 'N/A')}",
+            f"Total Flow Records: {len(df)}",
+            "--------------------------------------------------------------------------------",
+            f"{'ID':<6} {'TIMESTAMP':<20} {'MODE':<8} {'SRC_IP':<16} {'DST_IP':<16} {'PROTO':<6} {'CLASS':<8} {'ATTACK_TYPE'}",
+            "--------------------------------------------------------------------------------"
+        ]
+        
+        lines = header.copy()
+        for _, row in df.iterrows():
+            verdict = "ATTACK" if row['prediction'] == 1 else "NORMAL"
+            lines.append(f"{row['id']:<6} {str(row['timestamp']):<20} {str(row['mode']):<8} {str(row['src_ip']):<16} {str(row['dst_ip']):<16} {str(row['protocol']):<6} {verdict:<8} {str(row['attack_type'])}")
+        
+        txt_data = "\n".join(lines)
+        filename = f"ids_captured_history_{mode.lower() if mode else 'all'}.txt"
+        
+        response = StreamingResponse(iter([txt_data]), media_type="text/plain")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @router.get("/logs")
 def get_system_logs(limit: int = 50):
