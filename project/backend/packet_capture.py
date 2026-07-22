@@ -20,25 +20,33 @@ import database
 def resolve_interface_name(target_iface: Optional[str]) -> Optional[str]:
     if not target_iface:
         return None
+    # Trim stray whitespace and trailing punctuation (e.g. a pasted " Ethernet 5:"
+    # label). Without this, a trailing ":" survives normalization and the name
+    # never matches, silently dropping the sniffer into simulation mode.
+    target_iface = target_iface.strip().strip(":").strip()
+    if not target_iface:
+        return None
     try:
         from scapy.all import IFACES
         # 1. Exact match by key
         if target_iface in IFACES:
             return target_iface
-        
+
         # 2. Case-insensitive / normalized name match or description match
-        clean_target = target_iface.lower().replace("-", "").replace(" ", "").replace("_", "")
+        def _norm(s):
+            return (s or "").lower().replace("-", "").replace(" ", "").replace("_", "").replace(":", "")
+        clean_target = _norm(target_iface)
         # First try exact match after cleaning names
         for key, iface in IFACES.items():
-            name_clean = iface.name.lower().replace("-", "").replace(" ", "").replace("_", "")
-            desc_clean = (iface.description or "").lower().replace("-", "").replace(" ", "").replace("_", "")
+            name_clean = _norm(iface.name)
+            desc_clean = _norm(iface.description)
             if clean_target == name_clean or clean_target == desc_clean:
                 return key
-                
+
         # Then try substring match
         for key, iface in IFACES.items():
-            name_clean = iface.name.lower().replace("-", "").replace(" ", "").replace("_", "")
-            desc_clean = (iface.description or "").lower().replace("-", "").replace(" ", "").replace("_", "")
+            name_clean = _norm(iface.name)
+            desc_clean = _norm(iface.description)
             if clean_target in name_clean or clean_target in desc_clean:
                 return key
     except Exception:
@@ -550,8 +558,11 @@ class PacketCaptureManager:
         avg_ensemble_score = total_ensemble_score / total_flows if total_flows > 0 else 0.0
         avg_if_score = total_if_score / total_flows if total_flows > 0 else 0.0
         
-        # Sort alerts by confidence score descending
-        alerts = sorted(alerts, key=lambda x: x["confidence"], reverse=True)
+        # Attacks first, then by confidence. Sorting by confidence alone buries
+        # real attacks: a benign flow reports its confidence as "how sure we are
+        # it's normal" (~100%), so an attack at ~100% sorts level with the crowd
+        # of benign flows instead of surfacing at the top of the window.
+        alerts = sorted(alerts, key=lambda x: (x["prediction"], x["confidence"]), reverse=True)
         
         # Build snapshot charts data
         timestamp_label = datetime_time_string(curr_time)

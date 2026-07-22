@@ -388,16 +388,18 @@ export default function OnlineDetection({ addToast, systemStatus, setSystemStatu
                   <span>No security intrusions identified in this sliding window. Target is safe.</span>
                 </div>
               ) : (
-                latestAlerts.map((alert) => (
-                  <div key={alert.id} className="border border-cyber-border rounded-xl bg-cyber-dark/40 overflow-hidden">
+                latestAlerts.map((alert) => {
+                  const isThreat = alert.prediction === 1;
+                  return (
+                  <div key={alert.id} className={`border rounded-xl overflow-hidden ${isThreat ? "border-cyber-red/50 bg-cyber-red/5" : "border-cyber-border bg-cyber-dark/40"}`}>
                     <div className="p-3.5 flex items-center justify-between text-xs font-mono">
                       <div className="flex items-center space-x-2">
                         <span className="text-gray-500">[{alert.timestamp.split(' ')[1]}]</span>
-                        <span className="text-cyber-red font-bold uppercase">[{alert.attack_type}]</span>
+                        <span className={`font-bold uppercase ${isThreat ? "text-cyber-red" : "text-cyber-green"}`}>[{alert.attack_type}]</span>
                         <span className="text-gray-300 font-semibold">{alert.src_ip} ➔ {alert.dst_ip}:{alert.dst_port}</span>
                       </div>
                       <div className="flex items-center space-x-3">
-                        <span className="text-cyber-red font-bold">CONFID: {alert.confidence}%</span>
+                        <span className={`font-bold ${isThreat ? "text-cyber-red" : "text-cyber-green"}`}>CONFID: {alert.confidence}%</span>
                         <button
                           onClick={() => setSelectedAlert(alert)}
                           className="p-1 bg-cyber-cyan/15 hover:bg-cyber-cyan text-cyber-cyan hover:text-cyber-dark border border-cyber-cyan/35 hover:border-cyber-cyan rounded transition duration-200 cursor-pointer"
@@ -408,7 +410,8 @@ export default function OnlineDetection({ addToast, systemStatus, setSystemStatu
                       </div>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

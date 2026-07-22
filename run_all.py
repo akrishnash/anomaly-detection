@@ -38,6 +38,36 @@ def log_stream(stream, prefix):
     except Exception:
         pass
 
+def wait_for_backend(port, proc, timeout=120):
+    """Polls the backend until it answers, so the frontend isn't launched into a
+    dead upstream. The backend's startup_event loads/trains the ML models, which
+    takes several seconds; if the frontend starts first its /api polls fail with
+    ECONNREFUSED and the browser shows a wall of 502s. Returns True once the
+    backend responds, False if it exits first or the timeout elapses."""
+    import urllib.request
+    import urllib.error
+    url = f"http://127.0.0.1:{port}/api/online/status"
+    deadline = time.time() + timeout
+    print(f"[*] Waiting for backend to become ready at {url} ...")
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            print(f"[-] Backend exited (code {proc.returncode}) before it became ready.")
+            return False
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status < 500:
+                    print("[+] Backend is ready.")
+                    return True
+        except urllib.error.HTTPError:
+            # Any HTTP response (even 4xx) means the server is up and serving.
+            print("[+] Backend is ready.")
+            return True
+        except Exception:
+            pass  # Not up yet (connection refused / in flight) -- keep polling.
+        time.sleep(0.5)
+    print(f"[-] Backend did not become ready within {timeout}s.")
+    return False
+
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     frontend_dir = os.path.join(root_dir, "project", "frontend")
@@ -96,6 +126,19 @@ def main():
         env=child_env
     )
 
+    # Drain the backend's output immediately so its PIPE buffer can't fill and
+    # block the process while we wait for it to finish booting.
+    backend_thread = threading.Thread(target=log_stream, args=(backend_proc.stdout, "[Backend]"), daemon=True)
+    backend_thread.start()
+
+    # 3b. Wait for the backend to actually serve requests BEFORE launching the
+    # frontend. Otherwise Vite (ready in ~1s) proxies /api calls into a backend
+    # that is still loading its ML models and every call 502s until it catches up.
+    if not wait_for_backend(backend_port, backend_proc):
+        print("[-] Backend never came up. Aborting so we don't launch a broken UI.")
+        kill_process_tree(backend_proc)
+        sys.exit(1)
+
     # 4. Pick a free frontend port too (VS Code port-forwards can squat 5173 as
     # well) and start the Vite Dev Server pinned to it.
     frontend_port = None
@@ -126,15 +169,13 @@ def main():
         env=child_env
     )
     
-    # Start stdout/stderr forwarding threads
-    backend_thread = threading.Thread(target=log_stream, args=(backend_proc.stdout, "[Backend]"), daemon=True)
+    # Backend output is already being drained (thread started above); just add
+    # the frontend forwarder here.
     frontend_thread = threading.Thread(target=log_stream, args=(frontend_proc.stdout, "[Frontend]"), daemon=True)
-    
-    backend_thread.start()
     frontend_thread.start()
-    
-    # Give servers a few seconds to boot, then open browser
-    time.sleep(4)
+
+    # Backend is confirmed ready; give Vite a moment to bind, then open browser.
+    time.sleep(2)
     print(f"\n[+] Both servers launched. Opening browser at http://127.0.0.1:{frontend_port}...")
     webbrowser.open(f"http://127.0.0.1:{frontend_port}")
     

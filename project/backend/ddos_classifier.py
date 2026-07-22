@@ -29,6 +29,17 @@ BRUTE_FORCE_PORTS = {21: "FTP", 22: "SSH", 23: "Telnet", 445: "SMB", 3389: "RDP"
 DISTRIBUTED_MIN_SOURCES = 10
 PORT_SCAN_MIN_PORTS = 15
 
+# Rate-based flood rules (UDP/ICMP/HTTP/Volumetric/Amplification) must not fire on
+# the pps/bps ARTIFACT that short flows produce: feature_extractor clamps a single
+# or instantaneous flow's duration to 1e-4 s, so a 1-packet flow reports ~10000
+# pkts/s and a similarly inflated byte rate. The bulk of live LAN traffic (DNS,
+# mDNS/LLMNR, stray ACKs, connection SYNs) is 1-3 packet flows, so without a volume
+# floor every one of them is mislabeled a flood. A genuine flood carries sustained
+# volume, so we only trust a high pps/bps when the flow has enough packets that the
+# rate is physically meaningful. Absolute high-packet-count triggers (pkts > N) are
+# unaffected and still fire on real floods regardless of duration.
+MIN_FLOOD_PKTS = 15
+
 
 def _normalize_protocol(proto) -> str:
     p = str(proto).strip().upper()
@@ -87,6 +98,10 @@ def classify_flow(flow: dict) -> dict:
     # flow_generator assigns fwd/bwd by sorted IP order, not true client->server,
     # so flood "one-way" tests must not assume traffic lands in the bwd bucket.
     oneway = max(fwd_bytes, bwd_bytes) / total_bytes if total_bytes > 0 else 1.0
+    # A pps/bps reading is only physically meaningful once the flow carries real
+    # volume; below the floor the rate is a duration-clamp artifact (see the note
+    # on MIN_FLOOD_PKTS), so rate-triggered flood rules must ignore it.
+    rate_trustworthy = pkts >= MIN_FLOOD_PKTS
 
     def verdict(attack_type, severity, confidence, evidence):
         return {
@@ -117,7 +132,7 @@ def classify_flow(flow: dict) -> dict:
 
     # ── Amplification / Reflection (abused UDP service + oversized replies) ──
     amp_service = AMPLIFICATION_PORTS.get(src_port) or AMPLIFICATION_PORTS.get(dst_port)
-    if proto == "UDP" and amp_service and mean_len > 400 and (pps > 10 or bps > 100000):
+    if proto == "UDP" and amp_service and mean_len > 400 and rate_trustworthy and (pps > 10 or bps > 100000):
         evidence = [
             f"{amp_service} service port with oversized packets (mean {mean_len:.0f} B)",
             f"traffic rate {bps:.0f} B/s"
@@ -138,7 +153,7 @@ def classify_flow(flow: dict) -> dict:
     ports_unknown = src_port == 0 and dst_port == 0
     slow_reflected = oneway >= 0.95 and pkts >= 3
     if proto == "UDP" and ports_unknown and mean_len > 400 and oneway > 0.8 and \
-            (pps > 10 or bps > 100000 or slow_reflected):
+            ((rate_trustworthy and (pps > 10 or bps > 100000)) or slow_reflected):
         evidence = [
             f"oversized UDP packets (mean {mean_len:.0f} B) in one-way traffic (reflection signature)",
             f"traffic rate {bps:.0f} B/s",
@@ -148,7 +163,7 @@ def classify_flow(flow: dict) -> dict:
         return verdict("Amplification Attack (unknown service)", severity, 0.7, evidence)
 
     # ── UDP Flood (high-rate, one-directional UDP) ──
-    if proto == "UDP" and (pps > 50 or pkts > 100) and oneway > 0.8:
+    if proto == "UDP" and ((pps > 50 and rate_trustworthy) or pkts > 100) and oneway > 0.8:
         evidence = [
             f"high-rate UDP ({pps:.0f} pkts/s, {int(pkts)} pkts)",
             "little to no return traffic"
@@ -157,7 +172,7 @@ def classify_flow(flow: dict) -> dict:
         return verdict("UDP Flood", severity, 0.8 if pps > 200 else 0.7, evidence)
 
     # ── ICMP Flood ──
-    if proto == "ICMP" and (pps > 20 or pkts > 50):
+    if proto == "ICMP" and ((pps > 20 and rate_trustworthy) or pkts > 50):
         evidence = [f"high-rate ICMP ({pps:.0f} pkts/s, {int(pkts)} pkts)"]
         severity = "Critical" if pps > 200 else "High"
         return verdict("ICMP Flood", severity, 0.8, evidence)
@@ -171,7 +186,7 @@ def classify_flow(flow: dict) -> dict:
         return verdict("Slowloris (Slow HTTP)", "High", 0.75, evidence)
 
     # ── HTTP Flood (established web connections at abnormal request rates) ──
-    if proto == "TCP" and dst_port in WEB_PORTS and ack > 0 and (pps > 20 or pkts > 200) and mean_len < 400:
+    if proto == "TCP" and dst_port in WEB_PORTS and ack > 0 and ((pps > 20 and rate_trustworthy) or pkts > 200) and mean_len < 400:
         evidence = [
             f"established web traffic at {pps:.0f} pkts/s ({int(pkts)} pkts)",
             f"small request-sized packets (mean {mean_len:.0f} B)"
@@ -191,7 +206,7 @@ def classify_flow(flow: dict) -> dict:
         return verdict("Data Exfiltration", "High", 0.6, evidence)
 
     # ── Generic volumetric flood (protocol-agnostic rate anomaly) ──
-    if pps > 1000 or bps > 5000000:
+    if rate_trustworthy and (pps > 1000 or bps > 5000000):
         evidence = [f"volumetric traffic ({pps:.0f} pkts/s, {bps / 1e6:.1f} MB/s)"]
         return verdict("Volumetric Flood", "Critical", 0.7, evidence)
 

@@ -90,4 +90,11 @@ if __name__ == "__main__":
     print(f"[*] Backend listening on http://127.0.0.1:{port}")
     # Bind all interfaces so the API is reachable via the LAN IP as well as
     # 127.0.0.1. NOTE: exposes the API to the local network with no auth.
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    #
+    # reload is OFF by default: uvicorn's reloader binds the socket in a parent
+    # process and serves from a child worker, so if the worker dies the parent
+    # keeps the port bound but returns nothing -> Vite's proxy reports 502 on
+    # every /api call. run_all.py already restarts the backend, so reload adds
+    # no value here. Set AEGIS_RELOAD=1 to opt back in for standalone dev.
+    reload = os.environ.get("AEGIS_RELOAD", "0") == "1"
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)
